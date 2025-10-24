@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-file_path = "izbb-kaza-ariza-verileri.xlsx"
+file_path = "..\\izbb-kaza-ariza-verileri.xlsx"
 df = pd.read_excel(file_path, sheet_name="Sayfa1")
 
 if "ISTIKAMET" in df.columns:
