@@ -45,9 +45,9 @@ for cadde, cnt in top5.items():
 # ---------------------------
 daily_counts = (
     df.groupby(["CADDE", "GUN"])
-      .size()
-      .rename("count")
-      .reset_index()
+    .size()
+    .rename("count")
+    .reset_index()
 )
 
 # Prepare a dict of daily Series with zeros filled for missing days
@@ -61,7 +61,7 @@ for cadde in top5_streets:
     all_days = pd.date_range(start=start, end=end, freq="D")
     s = (
         sub.set_index("GUN")["count"]
-           .reindex(all_days, fill_value=0)
+        .reindex(all_days, fill_value=0)
     )
     s.index.name = "GUN"
     series_by_cadde[cadde] = s
@@ -72,23 +72,36 @@ for cadde in top5_streets:
 # Data for boxplot must be a list of 1D arrays/Series
 data_for_box = [series_by_cadde[c] for c in top5_streets if c in series_by_cadde]
 
+colors = ["#59A14F", "#4E79A7", "#F28E2B", "#E15759", "#76B7B2"]  # Tableau palette
+
 plt.figure(figsize=(12, 6))
 bp = plt.boxplot(
     data_for_box,
     tick_labels=top5_streets,
     showfliers=True,
-    patch_artist=True
+    patch_artist=True,  # Needed for box face colors
+    medianprops=dict(color="black", linewidth=1.5)
 )
-plt.title("Top 5 Daily Incident Counts by Street")
-plt.ylabel("Daily Incident Count")
-plt.grid(axis="y", linestyle="--", alpha=0.5)
 
-for box in bp['boxes']:
-    box.set_alpha(0.8)
+# Apply unique colors to each box
+for patch, color in zip(bp['boxes'], colors):
+    patch.set_facecolor(color)
+    patch.set_edgecolor("black")
+    patch.set_linewidth(1.2)
 
-fig_path = "top5_cadde_daily_boxplot.png"
+# Optional: clean up whiskers/caps for consistency
+for whisker in bp['whiskers']:
+    whisker.set_color("black")
+for cap in bp['caps']:
+    cap.set_color("black")
+
+#plt.title("Top 5 Daily Incident Counts by Street Daily")
+plt.ylabel("Daily Incident Count", fontsize=12)
+plt.grid(axis="y", linestyle="--", alpha=0.4)
+plt.xticks(rotation=0)
+
+fig_path = "top5_cadde_daily_boxplot_colored.pdf"
 plt.tight_layout()
-plt.savefig(fig_path, dpi=200)
-plt.close()
-
+plt.savefig(fig_path, dpi=300)
+plt.show()
 print(f"Saved figure: {fig_path}")
