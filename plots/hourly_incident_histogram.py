@@ -5,7 +5,7 @@ from pathlib import Path
 
 # ---- Paths ----
 file_path = Path("../dataCleaning/izbb-kaza-ariza-verileri_with_ilce_updated_with_gun_tipi.xlsx")
-out_png = Path("../dataCleaning/hourly_incidents_hist.png")
+out_pdf = Path("../dataCleaning/hourly_incidents_hist.pdf")
 
 # ---- Load data ----
 df = pd.read_excel(file_path)
@@ -65,5 +65,5 @@ ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
 
 fig.tight_layout()
-fig.savefig(out_png, dpi=200)
+fig.savefig(out_pdf, dpi=200)
 plt.show()
