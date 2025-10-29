@@ -58,5 +58,3 @@ def main():
 
     print(f"Saved pie chart to: {OUTPUT_PDF.resolve()}")
 
-if __name__ == "__main__":
-    main()
