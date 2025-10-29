@@ -5,7 +5,7 @@ from pathlib import Path
 
 # ---- Paths ----
 file_path = Path("../dataCleaning/izbb-kaza-ariza-verileri_with_ilce_updated_with_gun_tipi.xlsx")
-out_pdf = Path("../dataCleaning/hourly_incidents_hist.pdf")
+out_pdf = Path("hourly_incidents_hist.pdf")
 
 # ---- Load data ----
 df = pd.read_excel(file_path)

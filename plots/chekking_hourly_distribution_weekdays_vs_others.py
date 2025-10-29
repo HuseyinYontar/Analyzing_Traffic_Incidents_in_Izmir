@@ -19,8 +19,8 @@ days_nonweekday = df.loc[df["GUN_TIPI_2"] == "İş yok", "TARIH"].nunique()
 
 counts = df.groupby(["HOUR", "GUN_TIPI_2"]).size().unstack(fill_value=0)
 avg = pd.DataFrame({
-    "Hafta İçi": counts.get("Hafta İçi", 0) / max(days_weekday, 1),
-    "İş yok": counts.get("İş yok", 0) / max(days_nonweekday, 1),
+    "Working Days": counts.get("Hafta İçi", 0) / max(days_weekday, 1),
+    "Non-Working Days": counts.get("İş yok", 0) / max(days_nonweekday, 1),
 })
 
 
@@ -28,15 +28,16 @@ avg = avg.reindex(range(24), fill_value=0)
 
 
 ax = avg.plot(kind="bar", figsize=(12, 6))
-ax.set_title("Average Hourly Accidents: Weekdays vs Non-Weekdays (Weekend+Holiday)")
+#ax.set_title("Average Hourly Accidents: Working Days vs Non-Working Days")
 ax.set_xlabel("Hour of Day")
 ax.set_ylabel("Average Number of Accidents")
 ax.legend(title="Day Type")
 ax.grid(axis="y", linestyle="--", alpha=0.7)
+plt.xticks(rotation=0)
 plt.tight_layout()
 
 
-plt.savefig("hourly_weekday_vs_nonweekday.png", dpi=200)
+plt.savefig("hourly_workingday_vs_nonworkingday.pdf", dpi=200)
 plt.show()
 
 import pandas as pd

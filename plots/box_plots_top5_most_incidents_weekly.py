@@ -9,7 +9,11 @@ excel_path = "../dataCleaning/izbb-kaza-ariza-verileri_with_ilce_updated_with_gu
 df = pd.read_excel(excel_path)
 
 df.columns = [c.strip() for c in df.columns]
-
+plt.rcParams.update({
+    "font.family": "serif",
+    "font.serif": ["Times New Roman"],
+    "font.size": 16,
+})
 # --- 2) Columns ---
 street_col = "CADDE"
 if street_col not in df.columns:
@@ -49,7 +53,15 @@ weekly_counts = (
     .size()
     .reset_index(name="count")
 )
-
+rename_map = {
+    "Akçay Caddesi": "Akcay Street",
+    "Anadolu Caddesi": "Anadolu Street",
+    "Gaziosmanpaşa Bulvarı": "Gaziosmanpasa Boulevard",
+    "Mithatpaşa Caddesi": "Mithatpasa Street",
+    "Yeşildere Caddesi": "Yesildere Street"
+}
+top5 = [rename_map.get(s, s) for s in top5]
+weekly_counts[street_col] = weekly_counts[street_col].replace(rename_map)
 # Create list of weekly count arrays in the same order as top5
 data_for_boxplot = [
     weekly_counts.loc[weekly_counts[street_col] == s, "count"].values
@@ -84,9 +96,9 @@ for median in bp['medians']:
     median.set_linewidth(2)
 
 #plt.title("Top 5 Weekly Incident Counts by Street Weekly")
-plt.ylabel("Weekly Incident Count", fontsize=12)
+plt.ylabel("Weekly Incident Count", fontsize=14)
 plt.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
-plt.xticks(rotation=0)
+plt.xticks(rotation=0, fontsize=14)
 
 # --- Save & Display ---
 out_path = Path("top5_cadde_weekly_boxplot_colored.pdf")
