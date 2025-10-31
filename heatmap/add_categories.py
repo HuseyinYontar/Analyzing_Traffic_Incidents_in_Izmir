@@ -2,6 +2,7 @@ import os
 
 import pandas as pd
 from dotenv import load_dotenv
+from sklearn.preprocessing import KBinsDiscretizer
 
 
 def find_season(date):
@@ -38,18 +39,7 @@ def return_mudahale_categorie(mudahale_suresi):
 
 def return_hour_interval(kaza_zamani):
 
-    if kaza_zamani.hour <6:
-        return "Gece"
-    elif kaza_zamani.hour <7:
-        return "Sabah"
-    elif kaza_zamani.hour <10:
-        return "Yoğunluk"
-    elif kaza_zamani.hour <17:
-        return "Mesai Saati"
-    elif kaza_zamani.hour <20:
-        return "Yoğunluk"
-    else:
-        return "Gece"
+    return (kaza_zamani.hour+4)%24
 
 
 
@@ -67,15 +57,36 @@ load_dotenv()
 
 file_path = os.getenv("CLEANED_DATA_FILE")
 
-df = pd.read_excel(file_path)
+df = pd.read_excel(r"C:\Users\Atacan\Desktop\Analyzing_Traffic_Incidents_in_Izmir\izbb_kaza-ariza-verileri-SON.xlsx")
 
 df["TARIH"] = pd.to_datetime(df["TARIH"])
 df["MEVSIM"] = df["TARIH"].apply(find_season)
 df["CALISMA_DURUMU"] = df["GUN_TIPI"].apply(find_day_type)
 df["MUDAHALE_SINIFI"] = df["MUDAHALE_SURESI_DK"].apply(return_mudahale_categorie)
-df["KAZA_ZAMANI"] = pd.to_datetime(df["KAZA_ZAMANI"], errors="coerce")
-df["SAAT_ARALIGI"] = df["KAZA_ZAMANI"].apply(return_hour_interval)
+df["kaza_zamanı"] = pd.to_datetime(df["KAZA_ZAMANI"], errors="coerce")
+df["SAAT"] = df["kaza_zamanı"].apply(return_hour_interval)
 df["KAZA_TIPI"] = df["TUR"].apply(return_arıza)
+
+discretizer = KBinsDiscretizer(n_bins=4, encode='ordinal', strategy='quantile')
+df["SAAT_BIN"] = discretizer.fit_transform(df[["SAAT"]]).astype(int)
+
+bin_labels = {
+    0:"A",
+    1:"B",
+    2:"C",
+    3:"D",
+}
+
+df["SAAT_ARALIGI"] = df["SAAT_BIN"].map(bin_labels)
+
+print("=== Bin assignment summary ===")
+print(
+    df.assign(Adjusted_SAAT = (df["SAAT"]+20)%24)
+      .groupby(["Adjusted_SAAT", "SAAT_ARALIGI"])
+      .size()
+      .reset_index(name="Count")
+)
+df.drop(columns=["kaza_zamanı"], inplace=True)
 
 df.to_excel("izbb-kaza-ariza-verileri_with_ilce_updated_with_gun_tipi_categories.xlsx",index=False)
 
