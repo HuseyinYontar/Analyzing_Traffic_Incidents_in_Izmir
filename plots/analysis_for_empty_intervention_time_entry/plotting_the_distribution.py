@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from path_getter import get_path_for_plotting
 
 # Get file path dynamically
-file_path = "imputed_missing_intervention_time_by_median_location_incident_type.xlsx"
+file_path = "imputed_missing_intervention_time_by_median_incident_type_district_hour_interval.xlsx"
 
 # Load the Excel file
 df = pd.read_excel(file_path)
