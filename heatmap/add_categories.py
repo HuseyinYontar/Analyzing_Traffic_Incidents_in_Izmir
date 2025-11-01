@@ -39,7 +39,7 @@ def return_mudahale_categorie(mudahale_suresi):
 
 def return_hour_interval(kaza_zamani):
 
-    return (kaza_zamani.hour+4)%24
+    return (kaza_zamani.hour+4)%24*60+kaza_zamani.minute
 
 
 
