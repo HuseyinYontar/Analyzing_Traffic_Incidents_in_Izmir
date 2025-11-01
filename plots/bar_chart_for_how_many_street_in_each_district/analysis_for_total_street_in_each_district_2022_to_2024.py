@@ -27,7 +27,6 @@ unique_streets = (
     .nunique()
     .reset_index(name="UNIQUE_CADDE_COUNT")
 )
-
 # --- Pivot for easier plotting ---
 pivot_df = unique_streets.pivot(index="ILCE", columns="YIL", values="UNIQUE_CADDE_COUNT").fillna(0)
 
@@ -35,9 +34,9 @@ pivot_df = unique_streets.pivot(index="ILCE", columns="YIL", values="UNIQUE_CADD
 plt.figure(figsize=(12, 7))
 pivot_df.plot(kind="bar", figsize=(12, 7))
 
-plt.title("Number of Unique Streets (CADDE) per District (İLÇE) by Year", fontsize=14)
-plt.xlabel("District (İlçe)")
-plt.ylabel("Number of Unique Streets")
+# plt.title("Number of Unique Streets (CADDE) per District (İLÇE) by Year", fontsize=14)
+plt.xlabel("District")
+plt.ylabel("Number of Distinct Streets")
 plt.xticks(rotation=45, ha="right")
 plt.grid(axis="y", linestyle="--", alpha=0.6)
 plt.legend(title="Year")

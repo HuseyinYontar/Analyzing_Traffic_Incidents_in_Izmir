@@ -31,7 +31,7 @@ grouped = (
 )
 
 # --- Create the figure ---
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(13, 8), sharex=True, height_ratios=[1, 1])
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 11), sharex=True, height_ratios=[1, 1])
 
 # --- Top: Total incidents ---
 ax1.plot(
@@ -42,8 +42,8 @@ ax1.plot(
     linewidth=2,
     label="Total Incidents"
 )
-ax1.set_title("Monthly Incidents (Top) and Distinct Streets (Bottom, Inverted)")
-ax1.set_ylabel("Total Incidents")
+#ax1.set_title("Monthly Incidents (Top) and Distinct Streets (Bottom, Inverted)")
+ax1.set_ylabel("Total Incidents",fontsize=13)
 ax1.legend(loc="upper left")
 ax1.grid(True, linestyle="--", alpha=0.6)
 
@@ -53,9 +53,9 @@ ax2.bar(
     -grouped["UNIQUE_CADDE_COUNT"],  # make them negative to appear inverted
     color="steelblue",
     width=0.6,
-    label="Distinct Streets (CADDE)"
+    label="Number of Distinct Streets"
 )
-ax2.set_ylabel("Distinct Streets (inverted)")
+ax2.set_ylabel("Distinct Streets (Inverted)",fontsize=13)
 ax2.legend(loc="lower left")
 ax2.grid(True, linestyle="--", alpha=0.6)
 ax2.set_ylim(-grouped["UNIQUE_CADDE_COUNT"].max() * 1.2, 0)
@@ -65,5 +65,5 @@ plt.xticks(rotation=45, ha="right")
 plt.xlabel("Month")
 
 plt.tight_layout()
+plt.savefig("monthly_incidents_vs_distinct_streets_mirrored.pdf", bbox_inches="tight")
 plt.show()
-# plt.savefig("monthly_incidents_vs_distinct_streets_mirrored.pdf", bbox_inches="tight")
