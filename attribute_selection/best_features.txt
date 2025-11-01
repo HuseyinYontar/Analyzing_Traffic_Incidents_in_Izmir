@@ -1,0 +1,18 @@
+Best number of features: 15
+Best CV accuracy: 0.4923
+Features that achieved this best score:
+1. SAAT_ARALIGI_A
+2. MEVSIM_Kış
+3. MEVSIM_İlkbahar
+4. MEVSIM_Yaz
+5. MEVSIM_Sonbahar
+6. ISTIKAMET_Merkez
+7. ISTIKAMET_Konak
+8. CALISMA_DURUMU_İş Günü
+9. SAAT_ARALIGI_F
+10. ISTIKAMET_Bornova
+11. SAAT_ARALIGI_C
+12. SAAT_ARALIGI_E
+13. CADDE_Yeşildere Caddesi
+14. ILCE_Bayraklı
+15. ILCE_Konak
