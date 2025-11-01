@@ -51,7 +51,7 @@ def return_arıza(kaza_turu):
     elif kaza_turu == "Yaralanmalı Kaza" or kaza_turu=="Ölümlü":
         return "Yaralanmalı/Ölümlü "
     else:
-        return None
+        return "Diger"
 
 load_dotenv()
 
@@ -88,7 +88,7 @@ print(
 )
 df.drop(columns=["kaza_zamanı"], inplace=True)
 
-df.to_excel("izbb-kaza-ariza-verileri_with_ilce_updated_with_gun_tipi_categories.xlsx",index=False)
+df.to_excel("izbb-kaza-ariza-verileri_SON.xlsx",index=False)
 
 
 

@@ -19,6 +19,7 @@ df["holiday"] = df["GUN_TIPI"].isin(["Resmi Tatil","Hafta Sonu"])
 hourly_stats = (df.groupby("SAAT").agg(
     serious_accidents=("cana_geldi","sum"),
     not_serious_accidents=("mala_geldi","sum"),
+    break_down_accidents=("arabaya_geldi","sum")
 
 ).reset_index())
 # --- Saat bazında toplam ve yüzde hesapları ---
