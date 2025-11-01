@@ -37,4 +37,6 @@ plt.figure(figsize=(12, 10))
 sns.heatmap(corr, cmap="coolwarm", annot=True, linewidths=0.5)
 plt.title("Correlation of Weighted One-Hot Features (weighted by NORMALIZED_KAZA)")
 plt.tight_layout()
+plt.savefig("onehot_heatmap.pdf", format="pdf", bbox_inches="tight")
 plt.show()
+

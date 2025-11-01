@@ -39,7 +39,7 @@ def return_mudahale_categorie(mudahale_suresi):
 
 def return_hour_interval(kaza_zamani):
 
-    return (kaza_zamani.hour+4)%24*60+kaza_zamani.minute
+    return ((kaza_zamani.hour+4)%24)*60+kaza_zamani.minute
 
 
 
@@ -63,11 +63,11 @@ df["TARIH"] = pd.to_datetime(df["TARIH"])
 df["MEVSIM"] = df["TARIH"].apply(find_season)
 df["CALISMA_DURUMU"] = df["GUN_TIPI"].apply(find_day_type)
 df["MUDAHALE_SINIFI"] = df["MUDAHALE_SURESI_DK"].apply(return_mudahale_categorie)
-df["kaza_zamanı"] = pd.to_datetime(df["KAZA_ZAMANI"], errors="coerce")
-df["SAAT"] = df["kaza_zamanı"].apply(return_hour_interval)
 df["KAZA_TIPI"] = df["TUR"].apply(return_arıza)
 
-discretizer = KBinsDiscretizer(n_bins=4, encode='ordinal', strategy='quantile')
+df["kaza_zamanı"] = pd.to_datetime(df["KAZA_ZAMANI"], errors="coerce")
+df["SAAT"] = df["kaza_zamanı"].apply(return_hour_interval)
+discretizer = KBinsDiscretizer(n_bins=6, encode='ordinal', strategy='quantile')
 df["SAAT_BIN"] = discretizer.fit_transform(df[["SAAT"]]).astype(int)
 
 bin_labels = {
@@ -75,10 +75,11 @@ bin_labels = {
     1:"B",
     2:"C",
     3:"D",
+    4:"E",
+    5:"F",
 }
 
 df["SAAT_ARALIGI"] = df["SAAT_BIN"].map(bin_labels)
-
 print("=== Bin assignment summary ===")
 print(
     df.assign(Adjusted_SAAT = (df["SAAT"]+20)%24)
