@@ -1,0 +1,30 @@
+Best number of features (SFS): 27
+Best CV accuracy: 0.5181
+Features that achieved this best score:
+1. ISTIKAMET_Altındağ
+2. ISTIKAMET_Basmane
+3. ISTIKAMET_Bostanlı
+4. ISTIKAMET_Buca
+5. ISTIKAMET_Eşrefpaşa
+6. ISTIKAMET_Havalimanı
+7. ISTIKAMET_Kemalpaşa
+8. ISTIKAMET_Marina
+9. ISTIKAMET_Menderes
+10. ISTIKAMET_Smyrna
+11. ISTIKAMET_Soğukkuyu
+12. ISTIKAMET_Yaşayanlar
+13. ISTIKAMET_Yeşildere
+14. ISTIKAMET_Yunuslar
+15. ISTIKAMET_Çankaya
+16. ISTIKAMET_İkiçeşmelik
+17. ISTIKAMET_İnciraltı
+18. ILCE_Bayraklı
+19. ILCE_Gaziemir
+20. ILCE_Karşıyaka
+21. ILCE_Konak
+22. ILCE_Çiğli
+23. CALISMA_DURUMU_Tatil Günü
+24. SAAT_ARALIGI_A
+25. SAAT_ARALIGI_C
+26. SAAT_ARALIGI_E
+27. SAAT_ARALIGI_F
