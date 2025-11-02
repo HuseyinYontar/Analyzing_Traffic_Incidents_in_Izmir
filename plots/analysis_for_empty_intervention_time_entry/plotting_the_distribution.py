@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from path_getter import get_path_for_plotting
 
 # Get file path dynamically
-file_path = "imputed_missing_intervention_time_by_median_incident_type_district_hour_interval.xlsx"
+file_path = get_path_for_plotting()
 
 # Load the Excel file
 df = pd.read_excel(file_path)
@@ -28,10 +28,12 @@ counts = df_clean["MUDAHALE_SURESI_DK"].value_counts().sort_index()
 plt.figure(figsize=(10,6))
 plt.bar(counts.index, counts.values, color='teal', edgecolor='black')
 
-plt.title("Müdahale Süresi (Dakika) Dağılımı (Aykırı Değerler Hariç)", fontsize=14)
-plt.xlabel("Müdahale Süresi (dk)", fontsize=12)
-plt.ylabel("Olay Sayısı", fontsize=12)
+#plt.title("Müdahale Süresi (Dakika) Dağılımı (Aykırı Değerler Hariç)", fontsize=14)
+plt.xlabel("Intervention Time (minutes)", fontsize=13)
+plt.ylabel("Total Incidents", fontsize=13)
 plt.grid(axis='y', linestyle='--', alpha=0.7)
 plt.tight_layout()
+
+plt.savefig("original_intervention_time_entry.pdf", dpi=300, bbox_inches="tight")
 
 plt.show()

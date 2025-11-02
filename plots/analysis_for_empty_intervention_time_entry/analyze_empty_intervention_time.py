@@ -53,9 +53,9 @@ missing_daily.index.name = "TARIH"
 fig, ax = plt.subplots(figsize=(14, 5))
 ax.bar(missing_daily.index, missing_daily.values, width=1.0)
 
-ax.set_title("Daily Count of Missing MUDAHALE_ZAMANI")
+#ax.set_title("Daily Count of Missing MUDAHALE_ZAMANI")
 ax.set_xlabel("Date")
-ax.set_ylabel("Missing Count")
+ax.set_ylabel("Total Missing Interventions")
 
 
 locator = mdates.AutoDateLocator(minticks=8, maxticks=12)

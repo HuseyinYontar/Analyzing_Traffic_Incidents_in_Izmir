@@ -79,7 +79,7 @@ plt.scatter(
 
 plt.xlabel("Incident Time")
 plt.ylabel("Intervention Time (Minutes)")
-plt.title("Incident Time vs. Intervention Time (≤200 Min Included)")
+#plt.title("Incident Time vs. Intervention Time (≤200 Min Included)")
 plt.legend()
 
 # X-axis labels every 2 hours
@@ -91,8 +91,7 @@ plt.grid(True, linestyle="--", alpha=0.5)
 plt.tight_layout()
 
 # === Save to PDF ===
-output_path = "incident_time_vs_intervention_time.pdf"
-plt.savefig(output_path, format="pdf", bbox_inches="tight")
+output_path = "incident_time_vs_intervention_time.png"
+plt.savefig(output_path, format="png",dpi=300, bbox_inches="tight")
 plt.close()
 
-print(f"\n✅ Scatter plot saved as: {output_path}")
