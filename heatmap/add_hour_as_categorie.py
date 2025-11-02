@@ -15,6 +15,9 @@ def return_hour_interval(kaza_zamani):
 file_path = get_path_for_one_directory_in()
 df = pd.read_excel(file_path)
 
+valid_types = ["Arıza", "Maddi Hasarlı", "Yaralanmalı/Ölümlü"]
+df = df[df["KAZA_TIPI"].astype(str).str.strip().isin(valid_types)].copy()
+
 df["kaza_zamanı"] = pd.to_datetime(df["KAZA_ZAMANI"], errors="coerce")
 df["SAAT"] = df["kaza_zamanı"].apply(return_hour_interval)
 discretizer = KBinsDiscretizer(n_bins=6, encode='ordinal', strategy='quantile')
@@ -35,7 +38,7 @@ df["SAAT_ARALIGI"] = df["SAAT_BIN"].map(bin_labels)
 df.drop(columns=["kaza_zamanı"], inplace=True)
 
 
-df.to_excel("izbb-kaza-ariza-verileri-SON-binned-updated.xlsx",index=False)
+df.to_excel("izbb-kaza-ariza-verileri-SON-binned-frequent-accident_types.xlsx",index=False)
 
 
 

@@ -4,15 +4,18 @@ from sklearn.preprocessing import OneHotEncoder,MinMaxScaler
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-file_path = "izbb-kaza-ariza-verileri-SON-binned.xlsx"
+file_path = "izbb-kaza-ariza-verileri-SON-binned-frequent-accident_types.xlsx"
 df = pd.read_excel(file_path)
 
 categorical_columns = ["TIME_INTERVAL", "ACCIDENT_TYPE"]
+
+
 
 accident_map = {
     "Arıza": "Breakdown",
     "Maddi Hasarlı": "Property Damage",
     "Yaralanmalı/Ölümlü ": "Injury/Fatal",
+
 }
 
 df["KAZA_TIPI"] = df["KAZA_TIPI"].replace(accident_map)
@@ -45,6 +48,6 @@ corr = weighted_df.corr(numeric_only=True)
 plt.figure(figsize=(12, 10))
 sns.heatmap(corr, cmap="coolwarm", annot=True, linewidths=0.5)
 plt.tight_layout()
-plt.savefig("onehot_heatmap.pdf", format="pdf", bbox_inches="tight")
+plt.savefig("onehot_heatmap_frequent_accident_types.pdf", format="pdf", bbox_inches="tight")
 plt.show()
 
