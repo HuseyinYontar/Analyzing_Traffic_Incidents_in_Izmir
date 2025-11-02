@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 file_path = "izbb-kaza-ariza-verileri-SON-binned-frequent-accident_types.xlsx"
 df = pd.read_excel(file_path)
 
-categorical_columns = ["TIME_INTERVAL", "ACCIDENT_TYPE"]
+categorical_columns = ["TIME_INTERVAL", "INCIDENT_TYPE"]
 
 
 
@@ -25,7 +25,7 @@ grouped_df = (
     df.groupby(["SAAT_ARALIGI", "KAZA_TIPI"])
       .size()
       .reset_index(name="KAZA_SAYISI")
-    .rename(columns={"SAAT_ARALIGI": "TIME_INTERVAL", "KAZA_TIPI": "ACCIDENT_TYPE"})
+    .rename(columns={"SAAT_ARALIGI": "TIME_INTERVAL", "KAZA_TIPI": "INCIDENT_TYPE"})
 )
 
 
