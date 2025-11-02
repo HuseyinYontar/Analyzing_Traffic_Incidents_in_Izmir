@@ -35,7 +35,7 @@ df["SAAT_ARALIGI"] = df["SAAT_BIN"].map(bin_labels)
 df.drop(columns=["kaza_zamanı"], inplace=True)
 
 
-df.to_excel("izbb-kaza-ariza-verileri-SON-binned.xlsx",index=False)
+df.to_excel("izbb-kaza-ariza-verileri-SON-binned-updated.xlsx",index=False)
 
 
 
