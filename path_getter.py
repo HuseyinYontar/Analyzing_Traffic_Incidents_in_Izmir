@@ -8,3 +8,6 @@ def get_path_for_plotting() -> str:
 
 def get_path_for_one_directory_in() -> str:
     return file_path
+
+def get_path_for_binned_directory_in() -> str:
+    return "../../"+os.getenv("BINNED_DATA_FILE")
