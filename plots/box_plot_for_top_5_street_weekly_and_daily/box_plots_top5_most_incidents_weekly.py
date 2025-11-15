@@ -96,7 +96,7 @@ for median in bp['medians']:
     median.set_linewidth(2)
 
 #plt.title("Top 5 Weekly Incident Counts by Street Weekly")
-plt.ylabel("Weekly Incident Count", fontsize=14)
+plt.ylabel("Number of incidents per week", fontsize=14)
 plt.grid(axis="y", linestyle="--", linewidth=0.5, alpha=0.7)
 plt.xticks(rotation=0, fontsize=14)
 
