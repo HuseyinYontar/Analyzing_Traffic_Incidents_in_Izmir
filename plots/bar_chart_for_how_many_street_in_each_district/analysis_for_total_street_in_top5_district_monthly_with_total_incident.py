@@ -1,5 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 from path_getter import get_path_for_plotting
 
 # --- Load Excel file ---
@@ -36,39 +37,55 @@ grouped["INCIDENTS_PER_STREET"] = (
 ).round(2)
 
 print(grouped["INCIDENTS_PER_STREET"])
-# --- Create the figure with 3 rows ---
-fig, (ax1, ax2, ax3) = plt.subplots(
-    3, 1, figsize=(14, 14), sharex=True, height_ratios=[1, 1, 0.8]
+
+# ---- Prepare x positions for bar charts ----
+x = np.arange(len(grouped))  # numeric positions
+months = grouped.index       # string labels
+width = 0.4                  # bar width
+
+# --- Create the figure with 2 rows:
+#     1) combined bar chart (former ax1 + ax2)
+#     2) ratio line plot (former ax3)
+fig, (ax_combined, ax3) = plt.subplots(
+    2, 1, figsize=(14, 12), sharex=True, height_ratios=[1.3, 0.8]
 )
 
-# --- Top: Total incidents ---
-ax1.plot(
-    grouped.index,
-    grouped["TOTAL_INCIDENTS"],
-    color="red",
-    marker="o",
-    linewidth=2,
-    label="Total Incidents"
-)
-ax1.set_ylabel("Total Incidents", fontsize=13)
-ax1.grid(True, linestyle="--", alpha=0.6)
-ax1.legend(loc="upper left")
+# --- Top (combined): Distinct streets + Total incidents as bars with twin y-axes ---
 
-# --- Middle: Distinct streets (normal, not inverted) ---
-ax2.bar(
-    grouped.index,
+# Left axis: Distinct streets (original second graph, stays as bar chart)
+bars_streets = ax_combined.bar(
+    x - width / 2,
     grouped["UNIQUE_CADDE_COUNT"],
+    width=width,
     color="steelblue",
-    width=0.6,
     label="Number of Distinct Streets"
 )
-ax2.set_ylabel("Distinct Streets", fontsize=13)
-ax2.grid(True, linestyle="--", alpha=0.6)
-ax2.legend(loc="upper left")
+ax_combined.set_ylabel("Distinct Streets with Incidents per Month", fontsize=13)
+ax_combined.grid(True, linestyle="--", alpha=0.6)
 
-# --- Bottom: Ratio (standalone axis) ---
+# Right axis: Total incidents (original first graph, now also as bar chart)
+ax_combined_right = ax_combined.twinx()
+bars_incidents = ax_combined_right.bar(
+    x + width / 2,
+    grouped["TOTAL_INCIDENTS"],
+    width=width,
+    color="red",
+    label="Total Incidents"
+)
+ax_combined_right.set_ylabel("Total Incidents per Month", fontsize=13)
+
+# --- Combined legend from both axes ---
+handles_left, labels_left = ax_combined.get_legend_handles_labels()
+handles_right, labels_right = ax_combined_right.get_legend_handles_labels()
+ax_combined.legend(
+    handles_left + handles_right,
+    labels_left + labels_right,
+    loc="upper left"
+)
+
+# --- Bottom: Ratio (same as your original third graph) ---
 ax3.plot(
-    grouped.index,
+    x,
     grouped["INCIDENTS_PER_STREET"],
     color="darkgreen",
     linestyle="--",
@@ -76,14 +93,15 @@ ax3.plot(
     linewidth=2,
     label="Incidents per Street"
 )
-ax3.set_ylabel("Incidents / Street Ratio", fontsize=13)
+ax3.set_ylabel("Average Incidents per Street per Month", fontsize=13)
 ax3.grid(True, linestyle="--", alpha=0.6)
 ax3.legend(loc="upper left")
 
-# --- Shared X-axis setup ---
-plt.xticks(rotation=45, ha="right")
+# --- Shared X-axis setup (use numeric positions but show month labels) ---
+ax3.set_xticks(x)
+ax3.set_xticklabels(months, rotation=45, ha="right")
 plt.xlabel("Month")
 
 plt.tight_layout()
-plt.savefig("monthly_incidents_vs_distinct_streets.pdf", bbox_inches="tight")
+plt.savefig("monthly_incidents_vs_distinct_streets_combined.pdf", bbox_inches="tight")
 plt.show()
