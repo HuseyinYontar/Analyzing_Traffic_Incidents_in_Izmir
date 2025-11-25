@@ -5,102 +5,127 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from pathlib import Path
 
-# ===== Config =====
-# If you prefer your helper, uncomment the two lines below and comment the hardcoded path:
-# from path_getter import get_path_for_one_directory_in
-# file_path = get_path_for_one_directory_in()
-file_path = "denememul.xlsx"      # same file you used for the heatmap
-TOP_K = 2                         # 2, 3, or "all"
+# ========= Paths =========
+file_path = "denememul.xlsx"
+out_dir = Path(".")
 
-# ===== Load =====
+# ========= Load =========
 df = pd.read_excel(file_path)
+print("Raw shape:", df.shape)
+print("Columns:", df.columns.tolist())
 
-# ===== Keep only SAAT_ARALIGI_* columns =====
-saat_cols_all = [c for c in df.columns if c.startswith("SAAT_ARALIGI_")]
-if not saat_cols_all:
-    raise ValueError("No columns starting with 'SAAT_ARALIGI_' were found.")
+# ========= KAZA_TIPI one-hot sütunlarını bul =========
+kaza_ohe_cols = [c for c in df.columns if c.startswith("KAZA_TIPI_")]
+if not kaza_ohe_cols:
+    raise ValueError("No KAZA_TIPI_* one-hot columns found.")
+print("Using KAZA_TIPI one-hot columns:", kaza_ohe_cols)
 
-# pick top-k by variance (or all)
-if TOP_K == "all":
-    saat_cols = saat_cols_all
-else:
-    var_series = df[saat_cols_all].var(numeric_only=True)
-    saat_cols = var_series.sort_values(ascending=False).head(int(TOP_K)).index.tolist()
+ohe_vals = df[kaza_ohe_cols].fillna(0).to_numpy()
 
-print("Using SAAT_ARALIGI features:", saat_cols)
+def infer_kaza_label(row_vals, cols):
+    """One-hot'tan Türkçe label çıkar. Hepsi 0 ise 'Unknown' döner."""
+    idx = np.argmax(row_vals)
+    if row_vals[idx] <= 0:
+        return "Unknown"
+    return cols[idx].replace("KAZA_TIPI_", "").strip()
 
-# ===== Matrix & labels =====
-X = df[saat_cols].fillna(0).to_numpy()
+# Satır satır Türkçe label üret
+raw_labels = [
+    infer_kaza_label(ohe_vals[i, :], kaza_ohe_cols)
+    for i in range(len(df))
+]
+kaza_labels_tr = pd.Series(raw_labels, name="KAZA_TIPI_TR")
 
-def argmax_label(row_vals, cols, prefix="SAAT_ARALIGI_"):
-    idxs = [i for i, c in enumerate(cols) if c.startswith(prefix)]
-    sub = row_vals[idxs]
-    return cols[idxs[np.argmax(sub)]].replace(prefix, "") if len(idxs) else None
+# Unknown olanları zorunlu olarak 'Yaralanmalı/Ölümlü' yap
+kaza_labels_tr = kaza_labels_tr.replace("Unknown", "Yaralanmalı/Ölümlü")
 
-saat_labels = [argmax_label(r, saat_cols) for r in X]
+# Türkçe -> INCIDENT_TYPE_* mapping
+label_map = {
+    "Arıza": "INCIDENT_TYPE_Breakdown",
+    "Maddi Hasarlı": "INCIDENT_TYPE_Property Damage",
+    "Yaralanmalı/Ölümlü": "INCIDENT_TYPE_Injury/Fatal",
+}
 
-# ===== PCA =====
-nfeat = X.shape[1]
-n_components = min(2, nfeat)
+incident_labels = kaza_labels_tr.replace(label_map)
+incident_labels.name = "INCIDENT_TYPE"
+
+print("Label counts (INCIDENT_TYPE):\n", incident_labels.value_counts())
+
+# ========= Features: TÜM SÜTUNLAR =========
+feature_cols = df.columns.tolist()
+print("Using feature columns:", feature_cols)
+
+X = df[feature_cols].fillna(0).to_numpy()
+
+# ========= PCA =========
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
-pca = PCA(n_components=n_components, random_state=42)
+pca = PCA(n_components=2, random_state=42)
 scores = pca.fit_transform(X_scaled)
-components = pca.components_                  # shape: (n_components, nfeat)
-evr = pca.explained_variance_ratio_           # length: n_components
+components = pca.components_
+evr = pca.explained_variance_ratio_
 
-# ===== Save tables =====
-out_dir = Path(".")
-pd.DataFrame({
-    "PC1": scores[:, 0],
-    "PC2": scores[:, 1] if n_components == 2 else np.zeros(len(scores)),
-    "SAAT_ARALIGI": saat_labels
-}).to_excel(out_dir / "pca_scores_saat_only.xlsx", index=False)
+pc_names = ["PC1", "PC2"]
 
-pd.DataFrame(
-    components.T, index=saat_cols,
-    columns=[f"PC{i+1}_loading" for i in range(n_components)]
-).to_excel(out_dir / "pca_loadings_saat_only.xlsx")
+# ========= Save scores + INCIDENT_TYPE =========
+scores_df = pd.DataFrame(scores, columns=pc_names)
+scores_df["INCIDENT_TYPE"] = incident_labels.values
+scores_df.to_excel(out_dir / "pca_scores_allcols_incident.xlsx", index=False)
 
-pd.DataFrame({
-    "Component": [f"PC{i+1}" for i in range(n_components)],
-    "ExplainedVarianceRatio": evr
-}).to_excel(out_dir / "pca_explained_variance_saat_only.xlsx", index=False)
+# ========= Save loadings =========
+loadings_df = pd.DataFrame(
+    components.T,
+    index=feature_cols,
+    columns=[f"{pc}_loading" for pc in pc_names]
+)
+loadings_df.to_excel(out_dir / "pca_loadings_allcols_incident.xlsx")
 
-# ===== Plot (scatter + tiny biplot) =====
-plt.figure(figsize=(9, 7))
-# color by detected SAAT_ARALIGI label
-labels = pd.Series(saat_labels).fillna("Unknown")
-uniq = labels.unique()
-cmap = {lbl: i for i, lbl in enumerate(uniq)}
-colors = labels.map(cmap).values
+# ========= Save explained variance =========
+evr_df = pd.DataFrame({
+    "Component": pc_names,
+    "ExplainedVarianceRatio": evr,
+    "CumulativeExplainedVariance": np.cumsum(evr),
+})
+evr_df.to_excel(
+    out_dir / "pca_explained_variance_allcols_incident.xlsx",
+    index=False
+)
 
-yvals = scores[:, 1] if n_components == 2 else np.zeros_like(scores[:, 0])
-plt.scatter(scores[:, 0], yvals, c=colors, alpha=0.8, edgecolor="k", linewidth=0.4)
+# ========= Scatter PC1 vs PC2 coloured by INCIDENT_TYPE =========
+plt.figure(figsize=(8, 6))
 
-handles = [plt.Line2D([], [], marker='o', linestyle='None', label=lbl) for lbl in uniq]
-plt.legend(handles=handles, title="SAAT_ARALIGI", loc="best", frameon=True)
-
+x_vals = scores[:, 0]
+y_vals = scores[:, 1]
 xlab = f"PC1 ({evr[0]*100:.1f}% var)"
-ylab = f"PC2 ({evr[1]*100:.1f}% var)" if n_components == 2 else "PC2 (not computed)"
+ylab = f"PC2 ({evr[1]*100:.1f}% var)"
+
+unique_labels = incident_labels.unique()
+
+for lbl in unique_labels:
+    idx = (incident_labels == lbl)
+    plt.scatter(
+        x_vals[idx],
+        y_vals[idx],
+        alpha=0.8,
+        edgecolor="k",
+        linewidth=0.4,
+        label=str(lbl)
+    )
+
 plt.xlabel(xlab)
 plt.ylabel(ylab)
-plt.title(f"PCA using SAAT_ARALIGI only (top-{TOP_K} by variance)" if TOP_K != "all" else
-          "PCA using SAAT_ARALIGI only (all bins)")
-
-# biplot arrows for selected hour bins
-scale = 3.0
-for i, col in enumerate(saat_cols):
-    xw = components[0, i]
-    yw = components[1, i] if n_components == 2 else 0.0
-    plt.arrow(0, 0, xw*scale, yw*scale, head_width=0.06, head_length=0.09, length_includes_head=True)
-    plt.text(xw*scale*1.06, (yw*scale*1.06), col, fontsize=10)
-
+# plt.title(...)  # İSTENMEDİĞİ İÇİN YOK
+plt.legend(title="INCIDENT_TYPE", loc="best", frameon=True)
 plt.grid(True, linestyle="--", alpha=0.4)
 plt.tight_layout()
-plt.savefig(out_dir / "pca_biplot_saat_only.pdf")
+plt.savefig(out_dir / "pca_scatter_allcols_incident.pdf")
 plt.show()
 
-print("Saved: pca_scores_saat_only.xlsx, pca_loadings_saat_only.xlsx, "
-      "pca_explained_variance_saat_only.xlsx, pca_biplot_saat_only.pdf")
+print(
+    "Saved: "
+    "pca_scores_allcols_incident.xlsx, "
+    "pca_loadings_allcols_incident.xlsx, "
+    "pca_explained_variance_allcols_incident.xlsx, "
+    "pca_scatter_allcols_incident.pdf"
+)
