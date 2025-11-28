@@ -56,7 +56,7 @@ print("Columns:", df.columns.tolist())
 # 2) SADECE ILCE == ilce KAYITLARINI KULLAN
 # ---------------------------------------------------------
 ilce_col = "ILCE"
-ilce = "Konak"  # burada istediğin caddeyi yaz (filtre için)
+ilce = "Konak"  # burada istediğin ilçeyi yaz (filtre için)
 
 ilce_label = ilce.strip()
 lower_name = ilce_label.lower()
@@ -66,13 +66,12 @@ if lower_name.endswith(" caddesi"):
 elif lower_name.endswith(" bulvarı"):
     ilce_label = ilce_label[: -len(" Bulvarı")] + " Boulevard"
 
-# Filtre her zamanki gibi Türkçe isme göre
 mask = df[ilce_col].astype(str).str.strip().str.lower().eq(ilce.strip().lower())
 df_konak = df[mask]
 
 print(f"\n{ilce_col} == '{ilce}' filtresi sonrası shape: {df_konak.shape}")
 if df_konak.empty:
-    raise ValueError("Filtre sonrası hiç satır kalmadı; CADDE kolonunu / yazımı kontrol et.")
+    raise ValueError("Filtre sonrası hiç satır kalmadı; ILCE kolonunu / yazımı kontrol et.")
 
 df = df_konak.copy()
 
@@ -86,52 +85,97 @@ df["TARIH"] = pd.to_datetime(df["TARIH"], errors="coerce")
 
 df["AY_ADI"] = df["TARIH"].dt.month_name().fillna("Unknown")
 df["GUN_BILGISI"] = df["TARIH"].dt.day_name().fillna("Unknown")
-df["TARIH_DATE"] = df["TARIH"].dt.date  # sadece sıralama / grupla için
+# TARIH_DATE: datetime64 (saat 00:00'a normalize)
+df["TARIH_DATE"] = df["TARIH"].dt.normalize()
 
 print("\nÖrnek AY_ADI:", df["AY_ADI"].unique()[:10])
 print("Örnek GUN_BILGISI:", df["GUN_BILGISI"].unique()[:10])
 
 # ---------------------------------------------------------
 # 4) Gün bazında ilçe için toplam kaza sayısı
+#    + eksik günleri 0 kaza ile doldur
 # ---------------------------------------------------------
-group_cols = [
-    "TARIH_DATE",
-    "GUN_TIPI",
-    "MEVSIM",
-    "CALISMA_DURUMU",
-    "AY_ADI",
-    "GUN_BILGISI",
-]
-
-existing_group_cols = [c for c in group_cols if c in df.columns]
-missing_group_cols = [c for c in group_cols if c not in df.columns]
-
-if missing_group_cols:
-    print("\nUYARI: Aşağıdaki kolonlar veri setinde yok, grupla(m)a için kullanılamıyor:")
-    print(missing_group_cols)
-
-if "TARIH_DATE" not in existing_group_cols:
-    raise ValueError("'TARIH_DATE' gruplama içinde yok, bir şeyler yanlış gitti.")
-
-df_daily = (
-    df.groupby(existing_group_cols)
-    .size()
-    .reset_index(name="KAZA_SAYISI")
+# 4.1) Sadece TARIH_DATE bazında günlük toplam kaza sayısını al
+df_daily_counts = (
+    df.groupby("TARIH_DATE", as_index=False)
+      .size()
+      .rename(columns={"size": "KAZA_SAYISI"})
 )
 
-print(f"\n{ilce_label} için günlük veri seti shape:", df_daily.shape)
+# 4.2) Her gün için temsilci satırdan kategorik feature’ları al
+cat_cols = ["GUN_TIPI", "MEVSIM", "CALISMA_DURUMU", "AY_ADI", "GUN_BILGISI"]
+cat_cols_exist = [c for c in cat_cols if c in df.columns]
+
+df_cat = (
+    df.sort_values("TARIH")   # aynı gün için bir satır seçmek için
+      .drop_duplicates("TARIH_DATE")[["TARIH_DATE"] + cat_cols_exist]
+)
+
+# 4.3) Günlük sayılarla kategorikleri birleştir
+df_daily = df_daily_counts.merge(df_cat, on="TARIH_DATE", how="left")
+
+print(f"\n{ilce_label} için (sadece veri olan günlere göre) günlük veri seti shape:", df_daily.shape)
 print("Kolonlar:", df_daily.columns.tolist())
 print(df_daily.head())
+
+# 4.4) Tüm tarih aralığı için takvim oluştur ve eksik günleri 0 kaza ile doldur
+full_dates = pd.date_range(start=TRAIN_START, end=TEST_END, freq="D")
+df_calendar = pd.DataFrame({"TARIH_DATE": full_dates})
+
+df_daily = df_calendar.merge(df_daily, on="TARIH_DATE", how="left")
+
+# Tarihe göre türetilebilen kolonları doldur
+df_daily["AY_ADI"] = df_daily["AY_ADI"].fillna(df_daily["TARIH_DATE"].dt.month_name())
+df_daily["GUN_BILGISI"] = df_daily["GUN_BILGISI"].fillna(df_daily["TARIH_DATE"].dt.day_name())
+
+# MEVSIM ve GUN_TIPI'yi tarih üzerinden, veri setindeki mantıkla doldur
+# (sadece boş veya 'Unknown' olanları değiştiriyoruz)
+
+# --- MEVSIM doldurma ---
+if "MEVSIM" in df_daily.columns:
+    mask_mevsim_na = df_daily["MEVSIM"].isna() | (df_daily["MEVSIM"] == "Unknown")
+    months = df_daily["TARIH_DATE"].dt.month
+
+    def month_to_season(m):
+        if m in [12, 1, 2]:
+            return "Kış"
+        elif m in [3, 4, 5]:
+            return "İlkbahar"
+        elif m in [6, 7, 8]:
+            return "Yaz"
+        else:
+            return "Sonbahar"
+
+    df_daily.loc[mask_mevsim_na, "MEVSIM"] = months[mask_mevsim_na].map(month_to_season)
+
+# --- GUN_TIPI doldurma ---
+if "GUN_TIPI" in df_daily.columns:
+    mask_gt_na = df_daily["GUN_TIPI"].isna() | (df_daily["GUN_TIPI"] == "Unknown")
+    # Monday=0 ... Sunday=6
+    weekday = df_daily["TARIH_DATE"].dt.dayofweek
+    gun_tipi_vals = np.where(weekday < 5, "Hafta İçi", "Hafta Sonu")
+    df_daily.loc[mask_gt_na, "GUN_TIPI"] = gun_tipi_vals[mask_gt_na]
+
+# Diğer kategorik kolonlar için (örneğin CALISMA_DURUMU) hala Unknown kullanabiliriz
+for col in ["CALISMA_DURUMU"]:
+    if col in df_daily.columns:
+        df_daily[col] = df_daily[col].fillna("Unknown")
+
+# Kaza sayısını boş olan günler için 0 yap
+df_daily["KAZA_SAYISI"] = df_daily["KAZA_SAYISI"].fillna(0).astype(int)
+
+print(f"\n{ilce_label} için TAKVİMLE BİRLİKTE günlük veri seti shape:", df_daily.shape)
+print(df_daily.head(10))
 
 # ---------------------------------------------------------
 # 4.bis) Her TARIH_DATE için zaman feature'ları tekil mi, kontrol et
 # ---------------------------------------------------------
 check = df_daily.groupby("TARIH_DATE")[[
-    "GUN_TIPI", "MEVSIM", "CALISMA_DURUMU", "AY_ADI", "GUN_BILGISI"
+    c for c in ["GUN_TIPI", "MEVSIM", "CALISMA_DURUMU", "AY_ADI", "GUN_BILGISI"]
+    if c in df_daily.columns
 ]].nunique()
 print("\nHer TARIH_DATE için kategorik kolonların maksimum unique sayıları:")
 print(check.max())
-# Hepsi 1 ise: her tarih için bu bilgiler tekil → tasarım tutarlı.
 
 # ---------------------------------------------------------
 # 5) lag_1 .. lag_21 feature'larını ekle (son 21 gün)
@@ -235,7 +279,6 @@ df_train_daily = pd.DataFrame({
     "GERCEK_KAZA_SAYISI": y_train.values,
 })
 
-# Train weekly
 df_train_daily["TARIH_DATE"] = pd.to_datetime(df_train_daily["TARIH_DATE"])
 iso_train = df_train_daily["TARIH_DATE"].dt.isocalendar()
 df_train_daily["YEAR"] = iso_train.year
@@ -250,7 +293,6 @@ df_train_weekly = (
 weekly_mean_baseline = df_train_weekly["GERCEK_KAZA_SAYISI"].mean()
 print("\nTrain haftalık ortalama kaza sayısı (Dummy weekly baseline):", weekly_mean_baseline)
 
-# Train monthly
 df_train_daily["YEAR_MONTH"] = df_train_daily["TARIH_DATE"].dt.to_period("M").astype(str)
 df_train_monthly = (
     df_train_daily
@@ -319,14 +361,12 @@ y_pred_dummy = dummy.predict(X_test_dummy)
 if len(X_test) > 0:
     y_pred_nn = pipe.predict(X_test)
 
-    # Günlük NN metrikleri (SADECE TEST SETİ)
     mae_nn = mean_absolute_error(y_test, y_pred_nn)
     mse_nn = mean_squared_error(y_test, y_pred_nn)
     rmse_nn = np.sqrt(mse_nn)
     r2_nn = r2_score(y_test, y_pred_nn)
     mape_nn = safe_mape(y_test, y_pred_nn)
 
-    # Günlük Dummy metrikleri (SADECE TEST SETİ)
     mae_dummy = mean_absolute_error(y_test, y_pred_dummy)
     mse_dummy = mean_squared_error(y_test, y_pred_dummy)
     rmse_dummy = np.sqrt(mse_dummy)
@@ -391,14 +431,12 @@ if len(X_test) > 0:
     y_week_nn = df_weekly["NN_TAHMIN"].values
     y_week_dummy = np.repeat(weekly_mean_baseline, len(y_week_true))
 
-    # Weekly NN (TEST)
     mae_week_nn = mean_absolute_error(y_week_true, y_week_nn)
     mse_week_nn = mean_squared_error(y_week_true, y_week_nn)
     rmse_week_nn = np.sqrt(mse_week_nn)
     r2_week_nn = r2_score(y_week_true, y_week_nn)
     mape_week_nn = safe_mape(y_week_true, y_week_nn)
 
-    # Weekly Dummy (TEST)
     mae_week_dummy = mean_absolute_error(y_week_true, y_week_dummy)
     mse_week_dummy = mean_squared_error(y_week_true, y_week_dummy)
     rmse_week_dummy = np.sqrt(mse_week_dummy)
@@ -575,32 +613,24 @@ if len(X_test) > 0:
     # -------------------------------------------------
     # 16) Datasetleri EXCEL olarak kaydet
     # -------------------------------------------------
-    # Train features (tarihli)
     train_features = X_train.reset_index(drop=True).copy()
     train_features.insert(0, "TARIH_DATE", train_dates.reset_index(drop=True).values)
 
-    # Train + target
     train_with_target = train_features.copy()
     train_with_target["KAZA_SAYISI"] = y_train.reset_index(drop=True).values
 
-    # Test features (tarihli)
     test_features = X_test.reset_index(drop=True).copy()
     test_features.insert(0, "TARIH_DATE", test_dates.reset_index(drop=True).values)
 
-    # Test + target
     test_with_target = test_features.copy()
     test_with_target["KAZA_SAYISI"] = y_test.reset_index(drop=True).values
 
-    # EXCEL olarak kaydet
     train_features.to_excel(f"{ilce}_train_features_daily.xlsx", index=False)
     train_with_target.to_excel(f"{ilce}_train_daily_with_target.xlsx", index=False)
     test_features.to_excel(f"{ilce}_test_features_daily.xlsx", index=False)
     test_with_target.to_excel(f"{ilce}_test_daily_with_target.xlsx", index=False)
 
-    # Weekly predicted & true (test dönemi)
     df_weekly.to_excel(f"{ilce}_weekly_true_and_predicted_test.xlsx", index=False)
-
-    # Monthly predicted & true (test dönemi)
     df_monthly.to_excel(f"{ilce}_monthly_true_and_predicted_test.xlsx", index=False)
 
     print("\nExcel dosyaları kaydedildi:")
@@ -616,7 +646,7 @@ if len(X_test) > 0:
     # -------------------------------------------------
     lin_reg_pipe = Pipeline(
         steps=[
-            ("preprocess", preprocess),  # GUN_TIPI / MEVSIM / AY_ADI için OneHotEncoder
+            ("preprocess", preprocess),
             ("model", LinearRegression()),
         ]
     )
@@ -641,18 +671,16 @@ if len(X_test) > 0:
     # 18) ZAMAN SERİSİ MODELLERİ (AR, MA, ES, ARMA, ARIMA, SARIMA)
     #     En düşük MAPE'li olan modeli seçeceğiz (TEST setine göre).
     # ---------------------------------------------------------
-    # Train ve test y'lerini zaman serisi tipinde hazırlayalım
     y_train_ts = pd.Series(y_train.values, index=pd.to_datetime(train_dates.values)).sort_index()
     y_test_ts = pd.Series(y_test.values, index=pd.to_datetime(test_dates.values)).sort_index()
 
     auto_model_orders = {}
-    ts_results = {}  # {model_name: (pred_series, mape_value)}
+    ts_results = {}
 
-    # Küçük yardımcı: MAPE hesapla
     def eval_mape(true_series, pred_series):
         return safe_mape(true_series.values, np.array(pred_series))
 
-    # 18.a) AR (AutoReg)
+    # 18.a) AR
     try:
         ar_model = AutoReg(y_train_ts, lags=7, old_names=False).fit()
         pred_ar = ar_model.forecast(steps=len(y_test_ts))
@@ -662,7 +690,7 @@ if len(X_test) > 0:
     except Exception as e:
         print("\nAR modeli hata verdi:", e)
 
-    # 18.b) MA (ARIMA(0,0,q))
+    # 18.b) MA (ARIMA(0,0,1))
     try:
         ma_model = ARIMA(y_train_ts, order=(0, 0, 1)).fit()
         pred_ma = ma_model.forecast(steps=len(y_test_ts))
@@ -672,7 +700,7 @@ if len(X_test) > 0:
     except Exception as e:
         print("MA modeli hata verdi:", e)
 
-    # 18.c) Exponential Smoothing (Holt-Winters) - günlük için 7'lik sezonalite
+    # 18.c) Exponential Smoothing (Holt-Winters)
     try:
         es_model = ExponentialSmoothing(
             y_train_ts,
@@ -687,7 +715,7 @@ if len(X_test) > 0:
     except Exception as e:
         print("Exponential Smoothing hata verdi:", e)
 
-    # 18.d) ARMA (ARIMA(p,0,q))
+    # 18.d) ARMA (ARIMA(2,0,2))
     try:
         arma_model = ARIMA(y_train_ts, order=(2, 0, 2)).fit()
         pred_arma = arma_model.forecast(steps=len(y_test_ts))
@@ -697,7 +725,7 @@ if len(X_test) > 0:
     except Exception as e:
         print("ARMA modeli hata verdi:", e)
 
-    # 18.e) ARIMA
+    # 18.e) ARIMA(2,1,2)
     try:
         arima_model = ARIMA(y_train_ts, order=(2, 1, 2)).fit()
         pred_arima = arima_model.forecast(steps=len(y_test_ts))
@@ -707,7 +735,7 @@ if len(X_test) > 0:
     except Exception as e:
         print("ARIMA modeli hata verdi:", e)
 
-    # 18.f) SARIMA (haftalık sezonalite varsayımı: 7)
+    # 18.f) SARIMA
     try:
         sarima_model = SARIMAX(
             y_train_ts,
@@ -725,13 +753,13 @@ if len(X_test) > 0:
 
     try:
         from pmdarima import auto_arima
-
         HAS_PMDARIMA = True
     except ImportError:
         HAS_PMDARIMA = False
         print("Warning: pmdarima is not installed; auto-ARIMA/auto-SARIMA will be skipped.")
 
     if HAS_PMDARIMA:
+        # 18.g) Auto-ARIMA
         try:
             auto_arima_model = auto_arima(
                 y_train_ts,
@@ -745,8 +773,7 @@ if len(X_test) > 0:
             mape_auto_arima = eval_mape(y_test_ts, pred_auto_arima)
             ts_results["Auto-ARIMA"] = (pred_auto_arima, mape_auto_arima)
 
-            # order bilgilerini sakla
-            order = auto_arima_model.order  # (p, d, q)
+            order = auto_arima_model.order
             seasonal_order = getattr(auto_arima_model, "seasonal_order_", None)
             auto_model_orders["Auto-ARIMA"] = (order, seasonal_order)
 
@@ -755,12 +782,12 @@ if len(X_test) > 0:
         except Exception as e:
             print("Auto-ARIMA modeli hata verdi:", e)
 
-        # 18.h) Auto-SARIMA (weekly seasonality m=7), if pmdarima is available
+        # 18.h) Auto-SARIMA
         try:
             auto_sarima_model = auto_arima(
                 y_train_ts,
                 seasonal=True,
-                m=7,  # weekly seasonality
+                m=7,
                 stepwise=True,
                 suppress_warnings=True,
                 error_action="ignore",
@@ -770,8 +797,8 @@ if len(X_test) > 0:
             mape_auto_sarima = eval_mape(y_test_ts, pred_auto_sarima)
             ts_results["Auto-SARIMA"] = (pred_auto_sarima, mape_auto_sarima)
 
-            order = auto_sarima_model.order  # (p, d, q)
-            seasonal_order = getattr(auto_sarima_model, "seasonal_order_", None)  # (P, D, Q, s)
+            order = auto_sarima_model.order
+            seasonal_order = getattr(auto_sarima_model, "seasonal_order_", None)
             auto_model_orders["Auto-SARIMA"] = (order, seasonal_order)
 
             print("Auto-SARIMA MAPE (%):", mape_auto_sarima)
@@ -792,7 +819,7 @@ if len(X_test) > 0:
     else:
         best_ts_name, (best_ts_pred, best_ts_mape) = min(
             ts_results.items(),
-            key=lambda kv: kv[1][1]  # MAPE'ye göre min
+            key=lambda kv: kv[1][1]
         )
         print(f"\nEn iyi zaman serisi modeli: {best_ts_name} (TEST MAPE = {best_ts_mape:.2f} %)")
         best_ts_order = None
@@ -805,7 +832,6 @@ if len(X_test) > 0:
     # -------------------------------------------------
     plt.figure(figsize=(14, 6))
 
-    # Test tarihlerini sıralı hale getirelim (zaten büyük ihtimalle sıralı ama garanti edelim)
     test_dates_sorted_idx = np.argsort(pd.to_datetime(test_dates.values))
     dates_sorted = pd.to_datetime(test_dates.values[test_dates_sorted_idx])
 
@@ -829,11 +855,9 @@ if len(X_test) > 0:
         alpha=0.8,
     )
 
-    # Zaman serisi tahminlerini çiz (TEST forecast)
     if best_ts_name is not None:
         best_ts_pred_array = np.array(best_ts_pred)
-        best_ts_pred_sorted = best_ts_pred_array  # forecast sırası zaten tarihle aynı adımda ilerliyor
-
+        best_ts_pred_sorted = best_ts_pred_array
         plt.plot(
             dates_sorted,
             best_ts_pred_sorted,
@@ -853,13 +877,10 @@ if len(X_test) > 0:
 
     # -------------------------------------------------
     # 21) TÜM DÖNEM İÇİN (TRAIN+TEST) GÜNLÜK TAHMİNLER
-    #     (Ama aylık MAPE'ler sadece TEST setine göre hesaplanacak.)
     # -------------------------------------------------
-    # NN ve Lineer: mevcut modelleri tüm X üzerinde çalıştır
-    y_pred_nn_all = pipe.predict(X)              # X: tüm günler (train + test)
+    y_pred_nn_all = pipe.predict(X)
     y_pred_lin_all = lin_reg_pipe.predict(X)
 
-    # Tam zaman serisi serisi
     dates_full_dt = pd.to_datetime(dates_full.values)
     y_full_ts = pd.Series(y.values, index=dates_full_dt).sort_index()
 
@@ -910,7 +931,6 @@ if len(X_test) > 0:
                     error_action="ignore",
                     trace=False,
                 )
-                # in-sample predictions for the full series
                 ts_all = pd.Series(
                     auto_full.predict_in_sample(),
                     index=y_full_ts.index
@@ -935,7 +955,6 @@ if len(X_test) > 0:
             print("\nTüm dönem için TS modeli yeniden fit edilirken hata oluştu:", e)
             ts_all = None
 
-    # Tüm günleri tek dataframe'de topla
     df_all_daily = pd.DataFrame({
         "TARIH_DATE": dates_full_dt,
         "GERCEK_KAZA_SAYISI": y.values,
@@ -950,7 +969,6 @@ if len(X_test) > 0:
 
     # -------------------------------------------------
     # 22) AYLIK toplama – SADECE TEST PERİYODU İÇİN
-    #     (Böylece aylık MAPE'ler sadece test setine göre hesaplanıyor.)
     # -------------------------------------------------
     mask_test_period_all = (
         (df_all_daily["TARIH_DATE"] >= TEST_START) &
@@ -974,20 +992,36 @@ if len(X_test) > 0:
         .agg(agg_dict)
     )
 
-    # Plot için zaman eksenini timestamp'e çevir
     df_monthly_all["MONTH_TS"] = df_monthly_all["YEAR_MONTH"].dt.to_timestamp()
 
-    # Aylık MAPE (SADECE TEST dönemi için)
+    # --- MONTHLY METRICS (TEST ONLY) WITH RMSE ---
+    # Neural network
     mape_nn_month_all = safe_mape(
         df_monthly_all["GERCEK_KAZA_SAYISI"],
         df_monthly_all["NN_TAHMIN"],
     )
+    rmse_nn_month_all = np.sqrt(
+        mean_squared_error(
+            df_monthly_all["GERCEK_KAZA_SAYISI"],
+            df_monthly_all["NN_TAHMIN"],
+        )
+    )
+
+    # Linear regression
     mape_lin_month_all = safe_mape(
         df_monthly_all["GERCEK_KAZA_SAYISI"],
         df_monthly_all["LIN_TAHMIN"],
     )
+    rmse_lin_month_all = np.sqrt(
+        mean_squared_error(
+            df_monthly_all["GERCEK_KAZA_SAYISI"],
+            df_monthly_all["LIN_TAHMIN"],
+        )
+    )
 
+    # Time-series model (if exists)
     mape_ts_month_all = None
+    rmse_ts_month_all = None
     if "TS_TAHMIN" in df_monthly_all.columns:
         mask_ts = df_monthly_all["TS_TAHMIN"].notna()
         if mask_ts.any():
@@ -995,12 +1029,17 @@ if len(X_test) > 0:
                 df_monthly_all.loc[mask_ts, "GERCEK_KAZA_SAYISI"],
                 df_monthly_all.loc[mask_ts, "TS_TAHMIN"],
             )
+            rmse_ts_month_all = np.sqrt(
+                mean_squared_error(
+                    df_monthly_all.loc[mask_ts, "GERCEK_KAZA_SAYISI"],
+                    df_monthly_all.loc[mask_ts, "TS_TAHMIN"],
+                )
+            )
 
     # -------------------------------------------------
     # 23) ÜÇ MODELİ AYLIK OLARAK KARŞILAŞTIRAN 3 ALT PLOT
-    #     (TEST DÖNEMİ TAMAMI: ŞUBAT–AĞUSTOS)
     # -------------------------------------------------
-    df_monthly_plot = df_monthly_all.copy()  # artık son 6 ay değil, tüm test ayları
+    df_monthly_plot = df_monthly_all.copy()
 
     start_month_label = df_monthly_plot["MONTH_TS"].min().strftime("%b %Y")
     end_month_label = df_monthly_plot["MONTH_TS"].max().strftime("%b %Y")
@@ -1009,12 +1048,15 @@ if len(X_test) > 0:
     x = df_monthly_plot["MONTH_TS"]
     y_true_month = df_monthly_plot["GERCEK_KAZA_SAYISI"]
 
-    # --- 1. subplot: NN (MLP) ---
+    # NN
     axes[0].plot(x, y_true_month, label="Observed", linewidth=2)
     axes[0].plot(
         x,
         df_monthly_plot["NN_TAHMIN"],
-        label=f"Neural Network (MLP) – Monthly MAPE of Test Set={mape_nn_month_all:.2f}%",
+        label=(
+            f"Neural Network (MLP) – "
+            f"Monthly MAPE={mape_nn_month_all:.2f}%, RMSE={rmse_nn_month_all:.2f}"
+        ),
         alpha=0.8,
     )
     axes[0].set_title(
@@ -1024,12 +1066,15 @@ if len(X_test) > 0:
     axes[0].set_ylabel("Monthly incident count")
     axes[0].legend()
 
-    # --- 2. subplot: Lineer Regresyon ---
+    # Linear regression
     axes[1].plot(x, y_true_month, label="Observed", linewidth=2)
     axes[1].plot(
         x,
         df_monthly_plot["LIN_TAHMIN"],
-        label=f"Linear Regression – Monthly MAPE of Test Set={mape_lin_month_all:.2f}%",
+        label=(
+            f"Linear Regression – "
+            f"Monthly MAPE={mape_lin_month_all:.2f}%, RMSE={rmse_lin_month_all:.2f}"
+        ),
         alpha=0.8,
     )
     axes[1].set_title(
@@ -1039,24 +1084,24 @@ if len(X_test) > 0:
     axes[1].set_ylabel("Monthly incident count")
     axes[1].legend()
 
-    # --- 3. subplot: En iyi Zaman Serisi modeli ---
+    # Time-series
     axes[2].plot(x, y_true_month, label="Observed", linewidth=2)
 
     if ("TS_TAHMIN" in df_monthly_plot.columns) and (mape_ts_month_all is not None):
 
-        # Varsayılan label
-        ts_label = f"{best_ts_name} Time-series Model – Monthly MAPE of Test Set={mape_ts_month_all:.2f}%"
+        ts_label = (
+            f"{best_ts_name} Time-series Model – "
+            f"Monthly MAPE={mape_ts_month_all:.2f}%, RMSE={rmse_ts_month_all:.2f}"
+        )
 
-        # Auto-ARIMA / Auto-SARIMA da dahil, ARIMA ailesi için parametre yazalım
         if best_ts_order is not None and best_ts_name in ("ARIMA", "Auto-ARIMA", "SARIMA", "Auto-SARIMA"):
             p, d, q = best_ts_order
 
-            # Aile ismini plot için sadeleştir: ARIMA / SARIMA
             if best_ts_name in ("ARIMA", "Auto-ARIMA"):
                 family_name = "ARIMA"
                 ts_label = (
                     f"{family_name} (p={p}, d={d}, q={q}) – "
-                    f"TEST monthly MAPE={mape_ts_month_all:.2f}%"
+                    f"Monthly MAPE={mape_ts_month_all:.2f}%, RMSE={rmse_ts_month_all:.2f}"
                 )
 
             elif best_ts_name in ("SARIMA", "Auto-SARIMA"):
@@ -1067,7 +1112,7 @@ if len(X_test) > 0:
 
                 ts_label = (
                     f"{family_name} (p={p}, d={d}, q={q}, s={s}) – "
-                    f"TEST monthly MAPE={mape_ts_month_all:.2f}%"
+                    f"Monthly MAPE={mape_ts_month_all:.2f}%, RMSE={rmse_ts_month_all:.2f}"
                 )
 
         axes[2].plot(
@@ -1103,15 +1148,16 @@ if len(X_test) > 0:
     plt.show()
 
     # -------------------------------------------------
-    # 24) Print summary of monthly MAPE values (TEST ONLY)
+    # 24) Print summary of monthly MAPE & RMSE values (TEST ONLY)
     # -------------------------------------------------
-    print(f"\n=== Summary of monthly MAPE values of {ilce} "
+    print(f"\n=== Summary of MONTHLY metrics of {ilce} "
           f"(TEST period {TEST_START.date()}–{TEST_END.date()}) ===")
-    print(f"Neural network (MLP): {mape_nn_month_all:.2f}%")
-    print(f"Linear regression   : {mape_lin_month_all:.2f}%")
+    print(f"Neural network (MLP): MAPE={mape_nn_month_all:.2f}%, RMSE={rmse_nn_month_all:.2f}")
+    print(f"Linear regression   : MAPE={mape_lin_month_all:.2f}%, RMSE={rmse_lin_month_all:.2f}")
 
-    if (mape_ts_month_all is not None) and (best_ts_name is not None):
-        print(f"{best_ts_name} time-series model: {mape_ts_month_all:.2f}%")
+    if (mape_ts_month_all is not None) and (best_ts_name is not None) and (rmse_ts_month_all is not None):
+        print(f"{best_ts_name} time-series model: "
+              f"MAPE={mape_ts_month_all:.2f}%, RMSE={rmse_ts_month_all:.2f}")
     else:
         print("Time-series model   : not available")
 
