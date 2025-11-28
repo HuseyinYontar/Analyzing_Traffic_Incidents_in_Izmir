@@ -12,9 +12,40 @@ df_scatter = df[["KAZA_ZAMANI", "MUDAHALE_SURESI_DK"]].copy()
 # === Parse time ===
 df_scatter["KAZA_ZAMANI"] = pd.to_datetime(df_scatter["KAZA_ZAMANI"], errors="coerce")
 
+
+
 # === Clean missing and limit to ≤200 minutes ===
 df_scatter = df_scatter.dropna(subset=["KAZA_ZAMANI", "MUDAHALE_SURESI_DK"])
+
+# === Count number of values > 200 minutes (NEW) ===
+over_200_count = (df_scatter["MUDAHALE_SURESI_DK"] > 200).sum()
+print(f"\n=== Number of Intervention Times > 200 Minutes: {over_200_count} ===")
+
+
 df_scatter = df_scatter[df_scatter["MUDAHALE_SURESI_DK"] <= 200]
+
+# === 5-number summary & outlier bounds (NEW) ===
+y = df_scatter["MUDAHALE_SURESI_DK"]
+
+min_val = y.min()
+q1 = y.quantile(0.25)
+median = y.quantile(0.50)
+q3 = y.quantile(0.75)
+max_val = y.max()
+iqr = q3 - q1
+lower_bound = q1 - 1.5 * iqr
+upper_bound = q3 + 1.5 * iqr
+
+print("\n=== 5-Number Summary for MUDAHALE_SURESI_DK (≤200 dk) ===")
+print(f"Min     : {min_val:.2f}")
+print(f"Q1      : {q1:.2f}")
+print(f"Median  : {median:.2f}")
+print(f"Q3      : {q3:.2f}")
+print(f"Max     : {max_val:.2f}")
+
+print("\n=== IQR-based Outlier Bounds ===")
+print(f"Lower bound: {lower_bound:.2f}")
+print(f"Upper bound: {upper_bound:.2f}")
 
 # === Extract hour for summary ===
 df_scatter["HOUR"] = df_scatter["KAZA_ZAMANI"].dt.hour
@@ -37,7 +68,7 @@ hourly_summary["OUTLIER_RATE_%"] = (
 ).round(2)
 
 # === Print summary to console ===
-print("\n=== Outlier Summary by Hour ===")
+print("\n=== Outlier Summary by Hour (Threshold = 64 dk) ===")
 for _, row in hourly_summary.iterrows():
     print(
         f"{int(row['HOUR']):02d}:00 - {int((row['HOUR']+1)%24):02d}:00 | "
@@ -79,7 +110,7 @@ plt.scatter(
 
 plt.xlabel("Incident Time")
 plt.ylabel("Intervention Time (Minutes)")
-#plt.title("Incident Time vs. Intervention Time (≤200 Min Included)")
+# plt.title("Incident Time vs. Intervention Time (≤200 Min Included)")
 plt.legend()
 
 # X-axis labels every 2 hours
@@ -90,8 +121,7 @@ plt.xticks(tick_positions, tick_labels, rotation=45, ha="right")
 plt.grid(True, linestyle="--", alpha=0.5)
 plt.tight_layout()
 
-# === Save to PDF ===
+# === Save to PNG ===
 output_path = "incident_time_vs_intervention_time.png"
-plt.savefig(output_path, format="png",dpi=300, bbox_inches="tight")
+# plt.savefig(output_path, format="png", dpi=300, bbox_inches="tight")
 plt.close()
-

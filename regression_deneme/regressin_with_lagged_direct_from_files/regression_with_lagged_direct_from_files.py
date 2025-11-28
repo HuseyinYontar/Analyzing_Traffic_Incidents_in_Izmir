@@ -26,8 +26,8 @@ def safe_mape(y_true, y_pred):
 # ---------------------------------------------------------
 # 1) Hazır train / test Excel dosyalarını yükle
 # ---------------------------------------------------------
-train_path = "konak_train_daily_with_target.xlsx"
-test_path  = "konak_test_daily_with_target.xlsx"
+train_path = "gaziemir_train_daily_with_target.xlsx"
+test_path  = "gaziemir_test_daily_with_target.xlsx"
 
 df_train = pd.read_excel(train_path)
 df_test  = pd.read_excel(test_path)
