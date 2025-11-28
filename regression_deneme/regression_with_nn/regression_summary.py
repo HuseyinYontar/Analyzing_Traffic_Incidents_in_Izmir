@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Data
+# Data (TEST period 2025-02-01–2025-08-31)
 locations = [
     "Gaziemir",
     "Yeşildere Street",
@@ -10,9 +10,10 @@ locations = [
     "Konak"
 ]
 
-mape_mlp = [7.91, 8.21, 7.32, 7.45, 5.09]
-mape_lin = [13.90, 11.54, 9.29, 11.43, 6.83]
-mape_ts  = [10.11, 11.66, 4.70, 11.16, 7.87]
+# Order of values: [Gaziemir, Yeşildere, Anadolu, Mürselpaşa, Konak]
+mape_mlp = [8.07, 17.93, 8.10, 7.40, 3.47]
+mape_lin = [35.77, 26.92, 10.38, 18.59, 12.02]
+mape_ts  = [8.64, 18.18, 3.61, 11.04, 7.42]
 
 x = np.arange(len(locations))
 width = 0.25
@@ -20,7 +21,7 @@ width = 0.25
 plt.figure(figsize=(10, 6))
 plt.bar(x - width, mape_mlp, width, label="Neural network (MLP)")
 plt.bar(x,         mape_lin, width, label="Linear regression")
-plt.bar(x + width, mape_ts,  width, label="Time-series model")
+plt.bar(x + width, mape_ts,  width, label="Best Time-series model")
 
 plt.ylabel("MAPE (%)")
 plt.xticks(x, locations, rotation=20)

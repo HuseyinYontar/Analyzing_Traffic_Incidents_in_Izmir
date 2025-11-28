@@ -33,6 +33,17 @@ def safe_mape(y_true, y_pred):
 
 
 # ---------------------------------------------------------
+# 0) Tarih aralıkları (sabit)
+# ---------------------------------------------------------
+TRAIN_START = pd.Timestamp(2021, 12, 1)
+TRAIN_END   = pd.Timestamp(2025, 1, 31)
+TEST_START  = pd.Timestamp(2025, 2, 1)
+TEST_END    = pd.Timestamp(2025, 8, 31)
+
+print("Train dönemi  :", TRAIN_START.date(), "→", TRAIN_END.date())
+print("Test dönemi   :", TEST_START.date(), "→", TEST_END.date())
+
+# ---------------------------------------------------------
 # 1) Veri setini yükle
 # ---------------------------------------------------------
 file_path = get_path_for_binned_directory_in()
@@ -46,7 +57,6 @@ print("Columns:", df.columns.tolist())
 # ---------------------------------------------------------
 ilce_col = "ILCE"
 ilce = "Konak"  # burada istediğin caddeyi yaz (filtre için)
-
 
 ilce_label = ilce.strip()
 lower_name = ilce_label.lower()
@@ -123,7 +133,6 @@ print("\nHer TARIH_DATE için kategorik kolonların maksimum unique sayıları:"
 print(check.max())
 # Hepsi 1 ise: her tarih için bu bilgiler tekil → tasarım tutarlı.
 
-
 # ---------------------------------------------------------
 # 5) lag_1 .. lag_21 feature'larını ekle (son 21 gün)
 # ---------------------------------------------------------
@@ -152,21 +161,16 @@ print(
 )
 
 # ---------------------------------------------------------
-# 5.bis) EN SON AYI VERİDEN ÇIKAR (eksik günler olduğu için)
+# 5.bis) SADECE TRAIN_START–TEST_END ARASI GÜNLERİ KULLAN
 # ---------------------------------------------------------
 dates_all = pd.to_datetime(df_model["TARIH_DATE"])
-last_month_period = dates_all.max().to_period("M")
+mask_period = (dates_all >= TRAIN_START) & (dates_all <= TEST_END)
 
-mask_not_last_month = dates_all.dt.to_period("M") != last_month_period
-removed_rows = (~mask_not_last_month).sum()
+df_model = df_model.loc[mask_period].reset_index(drop=True)
+dates_all = dates_all.loc[mask_period].reset_index(drop=True)
 
-print(f"\nSon ay (period: {last_month_period}) içindeki {removed_rows} gün veri dışı bırakılıyor.")
-
-df_model = df_model[mask_not_last_month].reset_index(drop=True)
-dates_all = pd.to_datetime(df_model["TARIH_DATE"])  # filtre sonrası güncel tarih vektörü
-
-print("Son ay çıkarıldıktan sonra df_model shape:", df_model.shape)
-print("Yeni max tarih:", dates_all.max())
+print("\nModelleme için kullanılan tarih aralığı (lag sonrası, filtrelenmiş):",
+      dates_all.min(), "→", dates_all.max())
 
 # ---------------------------------------------------------
 # 6) Feature ve target seçimi
@@ -186,25 +190,25 @@ data = pd.concat([X, y], axis=1).dropna()
 X = data[feature_cols]
 y = data["KAZA_SAYISI"]
 
-dates_full = pd.to_datetime(df_model["TARIH_DATE"]).loc[data.index]  # tarihleri X,y ile hizala
+# Tarihleri X,y ile hizala
+dates_full = dates_all.loc[data.index]
 
 print("\nTemizlenmiş X shape:", X.shape)
 print("Temizlenmiş y length:", len(y))
-print("Tarih aralığı (df_model sonrası):", dates_full.min(), "→", dates_full.max())
+print("Tarih aralığı (df_model + NA drop sonrası):", dates_full.min(), "→", dates_full.max())
 
 # ---------------------------------------------------------
 # 7) Train/Test ayrımı:
-#    TEST = 2025-02-01 .. 2025-08-31
-#    TRAIN = 2025-02-01'den önceki tüm günler
+#    TRAIN = 2021-12-01 .. 2025-01-31
+#    TEST  = 2025-02-01 .. 2025-08-31
 # ---------------------------------------------------------
-test_start = pd.Timestamp(2025, 2, 1)
-test_end = pd.Timestamp(2025, 8, 31)  # veride yoksa, <= 31 olan son güne kadar alınır
+mask_train = (dates_full >= TRAIN_START) & (dates_full <= TRAIN_END)
+mask_test = (dates_full >= TEST_START) & (dates_full <= TEST_END)
 
-mask_test = (dates_full >= test_start) & (dates_full <= test_end)
-mask_train = dates_full < test_start
-
-print(f"\nTest başlangıcı: {test_start}")
-print(f"Test bitişi   : {test_end}")
+print(f"\nTrain başlangıcı (sabit): {TRAIN_START}")
+print(f"Train bitişi   (sabit): {TRAIN_END}")
+print(f"Test başlangıcı  (sabit): {TEST_START}")
+print(f"Test bitişi     (sabit): {TEST_END}")
 
 if mask_train.sum() < 30 or mask_test.sum() < 10:
     print("\nUYARI: Train veya test seti çok küçük olabilir.")
@@ -220,8 +224,8 @@ train_dates = dates_full[mask_train]
 test_dates = dates_full[mask_test]
 
 print("\nTrain size (gün sayısı):", len(X_train), "Test size (gün sayısı):", len(X_test))
-print("Train tarih aralığı:", train_dates.min(), "→", train_dates.max())
-print("Test  (manuel: 2025-02-01 .. 2025-08-31) tarih aralığı:", test_dates.min(), "→", test_dates.max())
+print("Train tarih aralığı (fiili):", train_dates.min(), "→", train_dates.max())
+print("Test  tarih aralığı (fiili):", test_dates.min(), "→", test_dates.max())
 
 # ---------------------------------------------------------
 # 7.bis) Train için WEEKLY ve MONTHLY toplamları + baseline'lar
@@ -315,14 +319,14 @@ y_pred_dummy = dummy.predict(X_test_dummy)
 if len(X_test) > 0:
     y_pred_nn = pipe.predict(X_test)
 
-    # Günlük NN metrikleri
+    # Günlük NN metrikleri (SADECE TEST SETİ)
     mae_nn = mean_absolute_error(y_test, y_pred_nn)
     mse_nn = mean_squared_error(y_test, y_pred_nn)
     rmse_nn = np.sqrt(mse_nn)
     r2_nn = r2_score(y_test, y_pred_nn)
     mape_nn = safe_mape(y_test, y_pred_nn)
 
-    # Günlük Dummy metrikleri
+    # Günlük Dummy metrikleri (SADECE TEST SETİ)
     mae_dummy = mean_absolute_error(y_test, y_pred_dummy)
     mse_dummy = mean_squared_error(y_test, y_pred_dummy)
     rmse_dummy = np.sqrt(mse_dummy)
@@ -331,17 +335,17 @@ if len(X_test) > 0:
 
     print(
         f"\n=== {ilce_label} günlük kaza sayısı tahmini (son {max_lag} gün + zaman feature'ları) "
-        f"| TEST: {test_start.date()} .. {test_end.date()} ==="
+        f"| TEST: {TEST_START.date()} .. {TEST_END.date()} ==="
     )
 
-    print("\n--- Neural Network (MLPRegressor + lag_1..lag_21) - DAILY ---")
+    print("\n--- Neural Network (MLPRegressor + lag_1..lag_21) - DAILY (TEST) ---")
     print("MAE   :", mae_nn)
     print("MSE   :", mse_nn)
     print("RMSE  :", rmse_nn)
     print("R^2   :", r2_nn)
     print("MAPE  (%):", mape_nn)
 
-    print("\n--- DummyRegressor (train ortalaması) - DAILY ---")
+    print("\n--- DummyRegressor (train ortalaması) - DAILY (TEST) ---")
     print("MAE   :", mae_dummy)
     print("MSE   :", mse_dummy)
     print("RMSE  :", rmse_dummy)
@@ -358,7 +362,7 @@ if len(X_test) > 0:
     print(results_sample)
 
     # -------------------------------------------------
-    # 12) WEEKLY AGGREGATION: günlük tahminlerden haftalık tahmin üret
+    # 12) WEEKLY AGGREGATION: günlük tahminlerden haftalık tahmin üret (TEST)
     # -------------------------------------------------
     df_test_daily = pd.DataFrame({
         "TARIH_DATE": test_dates.values,
@@ -380,21 +384,21 @@ if len(X_test) > 0:
         })
     )
 
-    print("\nHaftalık (test seti) gerçek vs NN toplam kaza sayıları (ilk 10 hafta):")
+    print("\nHaftalık (TEST) gerçek vs NN toplam kaza sayıları (ilk 10 hafta):")
     print(df_weekly.head(10))
 
     y_week_true = df_weekly["GERCEK_KAZA_SAYISI"].values
     y_week_nn = df_weekly["NN_TAHMIN"].values
     y_week_dummy = np.repeat(weekly_mean_baseline, len(y_week_true))
 
-    # Weekly NN
+    # Weekly NN (TEST)
     mae_week_nn = mean_absolute_error(y_week_true, y_week_nn)
     mse_week_nn = mean_squared_error(y_week_true, y_week_nn)
     rmse_week_nn = np.sqrt(mse_week_nn)
     r2_week_nn = r2_score(y_week_true, y_week_nn)
     mape_week_nn = safe_mape(y_week_true, y_week_nn)
 
-    # Weekly Dummy
+    # Weekly Dummy (TEST)
     mae_week_dummy = mean_absolute_error(y_week_true, y_week_dummy)
     mse_week_dummy = mean_squared_error(y_week_true, y_week_dummy)
     rmse_week_dummy = np.sqrt(mse_week_dummy)
@@ -403,17 +407,17 @@ if len(X_test) > 0:
 
     print(
         f"\n=== {ilce_label} haftalık kaza sayısı tahmini (günlük tahminlerden toplanmış) "
-        f"| TEST: {test_start.date()} .. {test_end.date()} ==="
+        f"| TEST: {TEST_START.date()} .. {TEST_END.date()} ==="
     )
 
-    print("\n--- Neural Network (weekly, sum of daily NN) ---")
+    print("\n--- Neural Network (weekly, sum of daily NN) – TEST ---")
     print("MAE   (weekly):", mae_week_nn)
     print("MSE   (weekly):", mse_week_nn)
     print("RMSE  (weekly):", rmse_week_nn)
     print("R^2   (weekly):", r2_week_nn)
     print("MAPE  (weekly, %):", mape_week_nn)
 
-    print("\n--- Dummy WEEKLY baseline (train weekly mean, sabit) ---")
+    print("\n--- Dummy WEEKLY baseline (train weekly mean, sabit) – TEST ---")
     print("Train weekly mean accidents:", weekly_mean_baseline)
     print("MAE   (weekly):", mae_week_dummy)
     print("MSE   (weekly):", mse_week_dummy)
@@ -422,7 +426,7 @@ if len(X_test) > 0:
     print("MAPE  (weekly, %):", mape_week_dummy)
 
     # -------------------------------------------------
-    # 13) DAILY residual & comparison plots
+    # 13) DAILY residual & comparison plots (TEST)
     # -------------------------------------------------
     residuals = y_test.values - y_pred_nn
 
@@ -432,7 +436,7 @@ if len(X_test) > 0:
     plt.xlabel("Predicted daily incident count (NN)")
     plt.ylabel("Residuals (observed − predicted)")
     plt.title(
-        f"Residuals vs predicted values ({ilce_label}, test period: {test_start.date()}–{test_end.date()})"
+        f"Residuals vs predicted values ({ilce_label}, test period: {TEST_START.date()}–{TEST_END.date()})"
     )
     plt.tight_layout()
     plt.show()
@@ -442,7 +446,7 @@ if len(X_test) > 0:
     plt.xlabel("Residual")
     plt.ylabel("Frequency")
     plt.title(
-        f"Distribution of residuals ({ilce_label}, test period: {test_start.date()}–{test_end.date()})"
+        f"Distribution of residuals ({ilce_label}, test period: {TEST_START.date()}–{TEST_END.date()})"
     )
     plt.tight_layout()
     plt.show()
@@ -455,13 +459,13 @@ if len(X_test) > 0:
     plt.xlabel("Observed daily incident count")
     plt.ylabel("Predicted daily incident count (NN)")
     plt.title(
-        f"Daily observed vs predicted counts ({ilce_label}, test period: {test_start.date()}–{test_end.date()})"
+        f"Daily observed vs predicted counts ({ilce_label}, test period: {TEST_START.date()}–{TEST_END.date()})"
     )
     plt.tight_layout()
     plt.show()
 
     # -------------------------------------------------
-    # 14) Weekly actual vs predicted (NN) plot
+    # 14) Weekly actual vs predicted (NN) plot (TEST)
     # -------------------------------------------------
     plt.figure(figsize=(8, 5))
     plt.scatter(y_week_true, y_week_nn, alpha=0.7)
@@ -471,7 +475,7 @@ if len(X_test) > 0:
     plt.xlabel("Observed weekly incident count")
     plt.ylabel("Predicted weekly incident count (sum of daily NN)")
     plt.title(
-        f"Weekly observed vs predicted counts ({ilce_label}, test period: {test_start.date()}–{test_end.date()})"
+        f"Weekly observed vs predicted counts ({ilce_label}, test period: {TEST_START.date()}–{TEST_END.date()})"
     )
     plt.tight_layout()
     plt.show()
@@ -482,15 +486,15 @@ if len(X_test) > 0:
     plt.xlabel("Week (test period)")
     plt.ylabel("Weekly incident count")
     plt.title(
-        f"Weekly incident counts: observed vs NN predictions ({ilce_label}, {test_start.date()}–{test_end.date()})"
+        f"Weekly incident counts: observed vs NN predictions ({ilce_label}, {TEST_START.date()}–{TEST_END.date()})"
     )
     plt.legend()
     plt.tight_layout()
     plt.show()
 
     # -------------------------------------------------
-    # 15) MONTHLY AGGREGATION: günlük tahminlerden aylık tahmin (+ MAPE)
-    # -------------------------------------------------
+    # 15) MONTHLY AGGREGATION (TEST): günlük tahminlerden aylık tahmin (+ MAPE)
+    # ---------------------------------------------------------
     df_monthly = df_test_daily.copy()
     df_monthly["YEAR"] = df_monthly["TARIH_DATE"].dt.year
     df_monthly["MONTH"] = df_monthly["TARIH_DATE"].dt.month
@@ -504,21 +508,19 @@ if len(X_test) > 0:
         })
     )
 
-    print("\nAylık (test seti) gerçek vs NN toplam kaza sayıları:")
+    print("\nAylık (TEST) gerçek vs NN toplam kaza sayıları:")
     print(df_monthly.head(10))
 
     y_month_true = df_monthly["GERCEK_KAZA_SAYISI"].values
     y_month_nn = df_monthly["NN_TAHMIN"].values
     y_month_dummy = np.repeat(monthly_mean_baseline, len(y_month_true))
 
-    # Monthly NN
     mae_month_nn = mean_absolute_error(y_month_true, y_month_nn)
     mse_month_nn = mean_squared_error(y_month_true, y_month_nn)
     rmse_month_nn = np.sqrt(mse_month_nn)
     r2_month_nn = r2_score(y_month_true, y_month_nn)
     mape_month_nn = safe_mape(y_month_true, y_month_nn)
 
-    # Monthly Dummy
     mae_month_dummy = mean_absolute_error(y_month_true, y_month_dummy)
     mse_month_dummy = mean_squared_error(y_month_true, y_month_dummy)
     rmse_month_dummy = np.sqrt(mse_month_dummy)
@@ -527,17 +529,17 @@ if len(X_test) > 0:
 
     print(
         f"\n=== {ilce_label} aylık kaza sayısı tahmini (günlük tahminlerden toplanmış) "
-        f"| TEST: {test_start.date()} .. {test_end.date()} ==="
+        f"| TEST: {TEST_START.date()} .. {TEST_END.date()} ==="
     )
 
-    print("\n--- Neural Network (monthly, sum of daily NN) ---")
+    print("\n--- Neural Network (monthly, sum of daily NN) – TEST ---")
     print("MAE   (monthly):", mae_month_nn)
     print("MSE   (monthly):", mse_month_nn)
     print("RMSE  (monthly):", rmse_month_nn)
     print("R^2   (monthly):", r2_month_nn)
     print("MAPE  (monthly, %):", mape_month_nn)
 
-    print("\n--- Dummy MONTHLY baseline (train monthly mean, sabit) ---")
+    print("\n--- Dummy MONTHLY baseline (train monthly mean, sabit) – TEST ---")
     print("Train monthly mean accidents:", monthly_mean_baseline)
     print("MAE   (monthly):", mae_month_dummy)
     print("MSE   (monthly):", mse_month_dummy)
@@ -553,7 +555,7 @@ if len(X_test) > 0:
     plt.xlabel("Observed monthly incident count")
     plt.ylabel("Predicted monthly incident count (sum of daily NN)")
     plt.title(
-        f"Monthly observed vs predicted counts ({ilce_label}, test period: {test_start.date()}–{test_end.date()})"
+        f"Monthly observed vs predicted counts ({ilce_label}, test period: {TEST_START.date()}–{TEST_END.date()})"
     )
     plt.tight_layout()
     plt.show()
@@ -564,7 +566,7 @@ if len(X_test) > 0:
     plt.xlabel("Month (test period)")
     plt.ylabel("Monthly incident count")
     plt.title(
-        f"Monthly incident counts: observed vs NN predictions ({ilce_label}, {test_start.date()}–{test_end.date()})"
+        f"Monthly incident counts: observed vs NN predictions ({ilce_label}, {TEST_START.date()}–{TEST_END.date()})"
     )
     plt.legend()
     plt.tight_layout()
@@ -610,7 +612,7 @@ if len(X_test) > 0:
     print(f" - {ilce}_monthly_true_and_predicted_test.xlsx")
 
     # -------------------------------------------------
-    # 17) LINEER REGRESYON (aynı feature seti ile)
+    # 17) LINEER REGRESYON (aynı feature seti ile) – TEST performansı
     # -------------------------------------------------
     lin_reg_pipe = Pipeline(
         steps=[
@@ -628,7 +630,7 @@ if len(X_test) > 0:
     r2_lin = r2_score(y_test, y_pred_lin)
     mape_lin = safe_mape(y_test, y_pred_lin)
 
-    print("\n--- Linear Regression (daily) ---")
+    print("\n--- Linear Regression (daily) – TEST ---")
     print("MAE   :", mae_lin)
     print("MSE   :", mse_lin)
     print("RMSE  :", rmse_lin)
@@ -637,8 +639,8 @@ if len(X_test) > 0:
 
     # -------------------------------------------------
     # 18) ZAMAN SERİSİ MODELLERİ (AR, MA, ES, ARMA, ARIMA, SARIMA)
-    #     En düşük MAPE'li olan modeli seçeceğiz.
-    # -------------------------------------------------
+    #     En düşük MAPE'li olan modeli seçeceğiz (TEST setine göre).
+    # ---------------------------------------------------------
     # Train ve test y'lerini zaman serisi tipinde hazırlayalım
     y_train_ts = pd.Series(y_train.values, index=pd.to_datetime(train_dates.values)).sort_index()
     y_test_ts = pd.Series(y_test.values, index=pd.to_datetime(test_dates.values)).sort_index()
@@ -778,30 +780,28 @@ if len(X_test) > 0:
             print("Auto-SARIMA modeli hata verdi:", e)
 
     # -------------------------------------------------
-    # 19) EN İYİ ZAMAN SERİSİ MODELİNİ SEÇ
+    # 19) EN İYİ ZAMAN SERİSİ MODELİNİ SEÇ (TEST MAPE'ine göre)
     # -------------------------------------------------
     if len(ts_results) == 0:
         print("\nHiçbir zaman serisi modeli başarıyla fit edilemedi, TS karşılaştırması atlanacak.")
         best_ts_name = None
         best_ts_pred = None
         best_ts_mape = None
+        best_ts_order = None
+        best_ts_seasonal_order = None
     else:
         best_ts_name, (best_ts_pred, best_ts_mape) = min(
             ts_results.items(),
             key=lambda kv: kv[1][1]  # MAPE'ye göre min
         )
-        print(f"\nEn iyi zaman serisi modeli: {best_ts_name} (MAPE = {best_ts_mape:.2f} %)")
+        print(f"\nEn iyi zaman serisi modeli: {best_ts_name} (TEST MAPE = {best_ts_mape:.2f} %)")
         best_ts_order = None
         best_ts_seasonal_order = None
         if best_ts_name in auto_model_orders:
             best_ts_order, best_ts_seasonal_order = auto_model_orders[best_ts_name]
 
     # -------------------------------------------------
-    # 20) ÜÇ REGRESYON MODELİNİ TEK GRAFİKTE KARŞILAŞTIR
-    #     - NN (mevcut kod)
-    #     - Lineer Regresyon
-    #     - En iyi zaman serisi modeli
-    #     Legend'da MAPE değerleri yazacak
+    # 20) ÜÇ REGRESYON MODELİNİ TEK GRAFİKTE KARŞILAŞTIR (DAILY, TEST)
     # -------------------------------------------------
     plt.figure(figsize=(14, 6))
 
@@ -818,18 +818,18 @@ if len(X_test) > 0:
     plt.plot(
         dates_sorted,
         y_pred_nn_sorted,
-        label=f"Neural network (MLP) – MAPE={mape_nn:.2f}%",
+        label=f"Neural network (MLP) – TEST MAPE={mape_nn:.2f}%",
         alpha=0.8,
     )
 
     plt.plot(
         dates_sorted,
         y_pred_lin_sorted,
-        label=f"Linear regression – MAPE={mape_lin:.2f}%",
+        label=f"Linear regression – TEST MAPE={mape_lin:.2f}%",
         alpha=0.8,
     )
 
-    # Zaman serisi tahminlerini çiz
+    # Zaman serisi tahminlerini çiz (TEST forecast)
     if best_ts_name is not None:
         best_ts_pred_array = np.array(best_ts_pred)
         best_ts_pred_sorted = best_ts_pred_array  # forecast sırası zaten tarihle aynı adımda ilerliyor
@@ -837,7 +837,7 @@ if len(X_test) > 0:
         plt.plot(
             dates_sorted,
             best_ts_pred_sorted,
-            label=f"{best_ts_name} time-series model – MAPE={best_ts_mape:.2f}%",
+            label=f"{best_ts_name} time-series model – TEST MAPE={best_ts_mape:.2f}%",
             alpha=0.8,
         )
 
@@ -845,7 +845,7 @@ if len(X_test) > 0:
     plt.ylabel("Daily incident count")
     plt.title(
         f"Daily traffic incidents in {ilce_label}: observed vs model-based predictions\n"
-        f"(test period: {test_start.date()}–{test_end.date()})"
+        f"(TEST period: {TEST_START.date()}–{TEST_END.date()})"
     )
     plt.legend()
     plt.tight_layout()
@@ -853,9 +853,7 @@ if len(X_test) > 0:
 
     # -------------------------------------------------
     # 21) TÜM DÖNEM İÇİN (TRAIN+TEST) GÜNLÜK TAHMİNLER
-    #     - NN (MLP)
-    #     - Lineer Regresyon
-    #     - Zaman Serisi (en iyi model)
+    #     (Ama aylık MAPE'ler sadece TEST setine göre hesaplanacak.)
     # -------------------------------------------------
     # NN ve Lineer: mevcut modelleri tüm X üzerinde çalıştır
     y_pred_nn_all = pipe.predict(X)              # X: tüm günler (train + test)
@@ -902,6 +900,7 @@ if len(X_test) > 0:
                     enforce_invertibility=False,
                 ).fit(disp=False)
                 ts_all = best_full.predict(start=y_full_ts.index[0], end=y_full_ts.index[-1])
+
             elif best_ts_name == "Auto-ARIMA" and HAS_PMDARIMA:
                 auto_full = auto_arima(
                     y_full_ts,
@@ -950,10 +949,14 @@ if len(X_test) > 0:
         df_all_daily = df_all_daily.merge(df_ts_all, on="TARIH_DATE", how="left")
 
     # -------------------------------------------------
-    # 22) 2022-01'den itibaren AYLIK toplama
+    # 22) AYLIK toplama – SADECE TEST PERİYODU İÇİN
+    #     (Böylece aylık MAPE'ler sadece test setine göre hesaplanıyor.)
     # -------------------------------------------------
-    start_month_plot = pd.Timestamp(2022, 1, 1)
-    df_all_month = df_all_daily[df_all_daily["TARIH_DATE"] >= start_month_plot].copy()
+    mask_test_period_all = (
+        (df_all_daily["TARIH_DATE"] >= TEST_START) &
+        (df_all_daily["TARIH_DATE"] <= TEST_END)
+    )
+    df_all_month = df_all_daily[mask_test_period_all].copy()
 
     df_all_month["YEAR_MONTH"] = df_all_month["TARIH_DATE"].dt.to_period("M")
 
@@ -974,7 +977,7 @@ if len(X_test) > 0:
     # Plot için zaman eksenini timestamp'e çevir
     df_monthly_all["MONTH_TS"] = df_monthly_all["YEAR_MONTH"].dt.to_timestamp()
 
-    # Aylık MAPE (tüm 2022+ dönem için)
+    # Aylık MAPE (SADECE TEST dönemi için)
     mape_nn_month_all = safe_mape(
         df_monthly_all["GERCEK_KAZA_SAYISI"],
         df_monthly_all["NN_TAHMIN"],
@@ -995,25 +998,28 @@ if len(X_test) > 0:
 
     # -------------------------------------------------
     # 23) ÜÇ MODELİ AYLIK OLARAK KARŞILAŞTIRAN 3 ALT PLOT
+    #     (TEST DÖNEMİ TAMAMI: ŞUBAT–AĞUSTOS)
     # -------------------------------------------------
-    start_month_label = df_monthly_all["MONTH_TS"].min().strftime("%b %Y")
-    end_month_label = df_monthly_all["MONTH_TS"].max().strftime("%b %Y")
+    df_monthly_plot = df_monthly_all.copy()  # artık son 6 ay değil, tüm test ayları
+
+    start_month_label = df_monthly_plot["MONTH_TS"].min().strftime("%b %Y")
+    end_month_label = df_monthly_plot["MONTH_TS"].max().strftime("%b %Y")
     fig, axes = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
 
-    x = df_monthly_all["MONTH_TS"]
-    y_true_month = df_monthly_all["GERCEK_KAZA_SAYISI"]
+    x = df_monthly_plot["MONTH_TS"]
+    y_true_month = df_monthly_plot["GERCEK_KAZA_SAYISI"]
 
     # --- 1. subplot: NN (MLP) ---
     axes[0].plot(x, y_true_month, label="Observed", linewidth=2)
     axes[0].plot(
         x,
-        df_monthly_all["NN_TAHMIN"],
-        label=f"Neural Network (MLP) – MAPE={mape_nn_month_all:.2f}%",
+        df_monthly_plot["NN_TAHMIN"],
+        label=f"Neural Network (MLP) – Monthly MAPE of Test Set={mape_nn_month_all:.2f}%",
         alpha=0.8,
     )
     axes[0].set_title(
         f"Monthly Traffic Incidents in {ilce_label}: Neural Network vs Observed "
-        f"({start_month_label}–{end_month_label})"
+        f"(TEST, {start_month_label}–{end_month_label})"
     )
     axes[0].set_ylabel("Monthly incident count")
     axes[0].legend()
@@ -1022,13 +1028,13 @@ if len(X_test) > 0:
     axes[1].plot(x, y_true_month, label="Observed", linewidth=2)
     axes[1].plot(
         x,
-        df_monthly_all["LIN_TAHMIN"],
-        label=f"Linear Regression – MAPE={mape_lin_month_all:.2f}%",
+        df_monthly_plot["LIN_TAHMIN"],
+        label=f"Linear Regression – Monthly MAPE of Test Set={mape_lin_month_all:.2f}%",
         alpha=0.8,
     )
     axes[1].set_title(
         f"Monthly Traffic Incidents in {ilce_label}: Linear Regression vs Observed "
-        f"({start_month_label}–{end_month_label})"
+        f"(TEST, {start_month_label}–{end_month_label})"
     )
     axes[1].set_ylabel("Monthly incident count")
     axes[1].legend()
@@ -1036,10 +1042,10 @@ if len(X_test) > 0:
     # --- 3. subplot: En iyi Zaman Serisi modeli ---
     axes[2].plot(x, y_true_month, label="Observed", linewidth=2)
 
-    if ("TS_TAHMIN" in df_monthly_all.columns) and (mape_ts_month_all is not None):
+    if ("TS_TAHMIN" in df_monthly_plot.columns) and (mape_ts_month_all is not None):
 
         # Varsayılan label
-        ts_label = f"{best_ts_name} time-series model – MAPE={mape_ts_month_all:.2f}%"
+        ts_label = f"{best_ts_name} Time-series Model – Monthly MAPE of Test Set={mape_ts_month_all:.2f}%"
 
         # Auto-ARIMA / Auto-SARIMA da dahil, ARIMA ailesi için parametre yazalım
         if best_ts_order is not None and best_ts_name in ("ARIMA", "Auto-ARIMA", "SARIMA", "Auto-SARIMA"):
@@ -1050,7 +1056,7 @@ if len(X_test) > 0:
                 family_name = "ARIMA"
                 ts_label = (
                     f"{family_name} (p={p}, d={d}, q={q}) – "
-                    f"MAPE={mape_ts_month_all:.2f}%"
+                    f"TEST monthly MAPE={mape_ts_month_all:.2f}%"
                 )
 
             elif best_ts_name in ("SARIMA", "Auto-SARIMA"):
@@ -1061,12 +1067,12 @@ if len(X_test) > 0:
 
                 ts_label = (
                     f"{family_name} (p={p}, d={d}, q={q}, s={s}) – "
-                    f"MAPE={mape_ts_month_all:.2f}%"
+                    f"TEST monthly MAPE={mape_ts_month_all:.2f}%"
                 )
 
         axes[2].plot(
             x,
-            df_monthly_all["TS_TAHMIN"],
+            df_monthly_plot["TS_TAHMIN"],
             label=ts_label,
             alpha=0.8,
         )
@@ -1080,7 +1086,7 @@ if len(X_test) > 0:
 
     axes[2].set_title(
         f"Monthly Traffic Incidents in {ilce_label}: Best Time-series Model vs Observed "
-        f"({start_month_label}–{end_month_label})"
+        f"(TEST, {start_month_label}–{end_month_label})"
     )
     axes[2].set_ylabel("Monthly incident count")
     axes[2].set_xlabel("Date")
@@ -1088,16 +1094,19 @@ if len(X_test) > 0:
 
     plt.tight_layout()
 
-    fig.savefig(f"{ilce}_monthly_model_comparison.pdf",
-                format="pdf",
-                bbox_inches="tight")
+    fig.savefig(
+        f"{ilce}_monthly_model_comparison.pdf",
+        format="pdf",
+        bbox_inches="tight"
+    )
 
     plt.show()
 
     # -------------------------------------------------
-    # 24) Print summary of monthly MAPE values (from Jan 2022)
+    # 24) Print summary of monthly MAPE values (TEST ONLY)
     # -------------------------------------------------
-    print(f"\n=== Summary of monthly MAPE values of {ilce} ===")
+    print(f"\n=== Summary of monthly MAPE values of {ilce} "
+          f"(TEST period {TEST_START.date()}–{TEST_END.date()}) ===")
     print(f"Neural network (MLP): {mape_nn_month_all:.2f}%")
     print(f"Linear regression   : {mape_lin_month_all:.2f}%")
 
