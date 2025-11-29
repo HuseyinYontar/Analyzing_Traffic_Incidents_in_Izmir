@@ -11,17 +11,25 @@ locations = [
 ]
 
 # Order of values: [Gaziemir, Yeşildere, Anadolu, Mürselpaşa, Konak]
-mape_mlp = [8.07, 17.93, 8.10, 7.40, 3.47]
-mape_lin = [35.77, 26.92, 10.38, 18.59, 12.02]
-mape_ts  = [8.64, 18.18, 3.61, 11.04, 7.42]
+
+# --- MAPE (%) values ---
+mape_mlp = [20.01, 17.56, 12.20, 6.19, 7.20]
+mape_lin = [30.14, 34.07, 11.27, 18.82, 10.71]
+mape_ts  = [10.75, 22.65, 8.90, 14.35, 6.60]
+
+# --- RMSE values ---
+rmse_mlp = [9.77, 8.54, 7.83, 3.68, 15.86]
+rmse_lin = [14.07, 15.85, 7.68, 10.19, 24.28]
+rmse_ts  = [6.94, 13.31, 5.71, 11.23, 18.50]
 
 x = np.arange(len(locations))
 width = 0.25
 
+# ========= FIGURE 1: MAPE =========
 plt.figure(figsize=(10, 6))
 plt.bar(x - width, mape_mlp, width, label="Neural network (MLP)")
 plt.bar(x,         mape_lin, width, label="Linear regression")
-plt.bar(x + width, mape_ts,  width, label="Best Time-series model")
+plt.bar(x + width, mape_ts,  width, label="Best time-series model")
 
 plt.ylabel("MAPE (%)")
 plt.xticks(x, locations, rotation=20)
@@ -29,5 +37,20 @@ plt.ylim(0, max(mape_mlp + mape_lin + mape_ts) + 2)
 plt.grid(axis="y")
 plt.legend()
 plt.tight_layout()
-plt.savefig("regression_summary.pdf")
+plt.savefig("regression_summary_mape.pdf")
+plt.show()
+
+# ========= FIGURE 2: RMSE =========
+plt.figure(figsize=(10, 6))
+plt.bar(x - width, rmse_mlp, width, label="Neural network (MLP)")
+plt.bar(x,         rmse_lin, width, label="Linear regression")
+plt.bar(x + width, rmse_ts,  width, label="Best time-series model")
+
+plt.ylabel("RMSE")
+plt.xticks(x, locations, rotation=20)
+plt.ylim(0, max(rmse_mlp + rmse_lin + rmse_ts) + 2)
+plt.grid(axis="y")
+plt.legend()
+plt.tight_layout()
+plt.savefig("regression_summary_rmse.pdf")
 plt.show()

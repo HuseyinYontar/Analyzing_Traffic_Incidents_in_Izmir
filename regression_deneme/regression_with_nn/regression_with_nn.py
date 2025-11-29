@@ -56,7 +56,7 @@ print("Columns:", df.columns.tolist())
 # 2) SADECE ILCE == ilce KAYITLARINI KULLAN
 # ---------------------------------------------------------
 ilce_col = "ILCE"
-ilce = "Konak"  # burada istediğin ilçeyi yaz (filtre için)
+ilce = ("Konak")  # burada istediğin ilçeyi yaz (filtre için)
 
 ilce_label = ilce.strip()
 lower_name = ilce_label.lower()
@@ -668,13 +668,13 @@ if len(X_test) > 0:
     print("MAPE  (%):", mape_lin)
 
     # -------------------------------------------------
-    # 18) ZAMAN SERİSİ MODELLERİ (AR, MA, ES, ARMA, ARIMA, SARIMA)
+    # 18) ZAMAN SERİSİ MODELLERİ (AR, MA, ES, ARMA, ARIMA, SARIMA, Auto-ARIMA, Auto-SARIMA)
     #     En düşük MAPE'li olan modeli seçeceğiz (TEST setine göre).
     # ---------------------------------------------------------
     y_train_ts = pd.Series(y_train.values, index=pd.to_datetime(train_dates.values)).sort_index()
     y_test_ts = pd.Series(y_test.values, index=pd.to_datetime(test_dates.values)).sort_index()
 
-    auto_model_orders = {}
+    model_orders = {}   # her model için (order, seasonal_order) saklayacağız
     ts_results = {}
 
     def eval_mape(true_series, pred_series):
@@ -686,6 +686,8 @@ if len(X_test) > 0:
         pred_ar = ar_model.forecast(steps=len(y_test_ts))
         mape_ar = eval_mape(y_test_ts, pred_ar)
         ts_results["AR"] = (pred_ar, mape_ar)
+        # AR(7) gibi düşünebiliriz
+        model_orders["AR"] = ((7, 0, 0), None)
         print("\nAR MAPE (%):", mape_ar)
     except Exception as e:
         print("\nAR modeli hata verdi:", e)
@@ -696,6 +698,7 @@ if len(X_test) > 0:
         pred_ma = ma_model.forecast(steps=len(y_test_ts))
         mape_ma = eval_mape(y_test_ts, pred_ma)
         ts_results["MA"] = (pred_ma, mape_ma)
+        model_orders["MA"] = ((0, 0, 1), None)
         print("MA (ARIMA(0,0,1)) MAPE (%):", mape_ma)
     except Exception as e:
         print("MA modeli hata verdi:", e)
@@ -711,6 +714,8 @@ if len(X_test) > 0:
         pred_es = es_model.forecast(steps=len(y_test_ts))
         mape_es = eval_mape(y_test_ts, pred_es)
         ts_results["ExpSmooth"] = (pred_es, mape_es)
+        # Order parametresi yok; None bırakıyoruz
+        model_orders["ExpSmooth"] = (None, None)
         print("Exponential Smoothing MAPE (%):", mape_es)
     except Exception as e:
         print("Exponential Smoothing hata verdi:", e)
@@ -721,6 +726,7 @@ if len(X_test) > 0:
         pred_arma = arma_model.forecast(steps=len(y_test_ts))
         mape_arma = eval_mape(y_test_ts, pred_arma)
         ts_results["ARMA"] = (pred_arma, mape_arma)
+        model_orders["ARMA"] = ((2, 0, 2), None)
         print("ARMA (ARIMA(2,0,2)) MAPE (%):", mape_arma)
     except Exception as e:
         print("ARMA modeli hata verdi:", e)
@@ -731,6 +737,7 @@ if len(X_test) > 0:
         pred_arima = arima_model.forecast(steps=len(y_test_ts))
         mape_arima = eval_mape(y_test_ts, pred_arima)
         ts_results["ARIMA"] = (pred_arima, mape_arima)
+        model_orders["ARIMA"] = ((2, 1, 2), None)
         print("ARIMA(2,1,2) MAPE (%):", mape_arima)
     except Exception as e:
         print("ARIMA modeli hata verdi:", e)
@@ -747,10 +754,12 @@ if len(X_test) > 0:
         pred_sarima = sarima_model.forecast(steps=len(y_test_ts))
         mape_sarima = eval_mape(y_test_ts, pred_sarima)
         ts_results["SARIMA"] = (pred_sarima, mape_sarima)
+        model_orders["SARIMA"] = ((1, 1, 1), (1, 0, 1, 7))
         print("SARIMA(1,1,1)x(1,0,1,7) MAPE (%):", mape_sarima)
     except Exception as e:
         print("SARIMA modeli hata verdi:", e)
 
+    # pmdarima kontrol
     try:
         from pmdarima import auto_arima
         HAS_PMDARIMA = True
@@ -774,8 +783,12 @@ if len(X_test) > 0:
             ts_results["Auto-ARIMA"] = (pred_auto_arima, mape_auto_arima)
 
             order = auto_arima_model.order
-            seasonal_order = getattr(auto_arima_model, "seasonal_order_", None)
-            auto_model_orders["Auto-ARIMA"] = (order, seasonal_order)
+            seasonal_order = getattr(
+                auto_arima_model,
+                "seasonal_order_",
+                getattr(auto_arima_model, "seasonal_order", None),
+            )
+            model_orders["Auto-ARIMA"] = (order, seasonal_order)
 
             print("Auto-ARIMA MAPE (%):", mape_auto_arima)
             print("Auto-ARIMA order:", order, "seasonal_order:", seasonal_order)
@@ -797,9 +810,13 @@ if len(X_test) > 0:
             mape_auto_sarima = eval_mape(y_test_ts, pred_auto_sarima)
             ts_results["Auto-SARIMA"] = (pred_auto_sarima, mape_auto_sarima)
 
+            seasonal_order = getattr(
+                auto_sarima_model,
+                "seasonal_order_",
+                getattr(auto_sarima_model, "seasonal_order", None),
+            )
             order = auto_sarima_model.order
-            seasonal_order = getattr(auto_sarima_model, "seasonal_order_", None)
-            auto_model_orders["Auto-SARIMA"] = (order, seasonal_order)
+            model_orders["Auto-SARIMA"] = (order, seasonal_order)
 
             print("Auto-SARIMA MAPE (%):", mape_auto_sarima)
             print("Auto-SARIMA order:", order, "seasonal_order:", seasonal_order)
@@ -822,10 +839,12 @@ if len(X_test) > 0:
             key=lambda kv: kv[1][1]
         )
         print(f"\nEn iyi zaman serisi modeli: {best_ts_name} (TEST MAPE = {best_ts_mape:.2f} %)")
-        best_ts_order = None
-        best_ts_seasonal_order = None
-        if best_ts_name in auto_model_orders:
-            best_ts_order, best_ts_seasonal_order = auto_model_orders[best_ts_name]
+
+        # Order/sezonel order bilgisini al
+        best_ts_order, best_ts_seasonal_order = model_orders.get(best_ts_name, (None, None))
+
+        print("Best TS order:", best_ts_order)
+        print("Best TS seasonal_order:", best_ts_seasonal_order)
 
     # -------------------------------------------------
     # 20) ÜÇ REGRESYON MODELİNİ TEK GRAFİKTE KARŞILAŞTIR (DAILY, TEST)
@@ -857,7 +876,7 @@ if len(X_test) > 0:
 
     if best_ts_name is not None:
         best_ts_pred_array = np.array(best_ts_pred)
-        best_ts_pred_sorted = best_ts_pred_array
+        best_ts_pred_sorted = best_ts_pred_array  # tarihler zaten hizalı
         plt.plot(
             dates_sorted,
             best_ts_pred_sorted,
@@ -909,14 +928,17 @@ if len(X_test) > 0:
                 ts_all = best_full.predict(start=y_full_ts.index[0], end=y_full_ts.index[-1])
 
             elif best_ts_name == "ARIMA":
-                best_full = ARIMA(y_full_ts, order=(2, 1, 2)).fit()
+                # best_ts_order kullanılabilir ama sabit de kalsa olur
+                best_full = ARIMA(y_full_ts, order=best_ts_order or (2, 1, 2)).fit()
                 ts_all = best_full.predict(start=y_full_ts.index[0], end=y_full_ts.index[-1])
 
             elif best_ts_name == "SARIMA":
+                if best_ts_seasonal_order is None:
+                    best_ts_seasonal_order = (1, 0, 1, 7)
                 best_full = SARIMAX(
                     y_full_ts,
-                    order=(1, 1, 1),
-                    seasonal_order=(1, 0, 1, 7),
+                    order=best_ts_order or (1, 1, 1),
+                    seasonal_order=best_ts_seasonal_order,
                     enforce_stationarity=False,
                     enforce_invertibility=False,
                 ).fit(disp=False)
@@ -1061,7 +1083,7 @@ if len(X_test) > 0:
     )
     axes[0].set_title(
         f"Monthly Traffic Incidents in {ilce_label}: Neural Network vs Observed "
-        f"(TEST, {start_month_label}–{end_month_label})"
+        f"({start_month_label}–{end_month_label})"
     )
     axes[0].set_ylabel("Monthly incident count")
     axes[0].legend()
@@ -1079,7 +1101,7 @@ if len(X_test) > 0:
     )
     axes[1].set_title(
         f"Monthly Traffic Incidents in {ilce_label}: Linear Regression vs Observed "
-        f"(TEST, {start_month_label}–{end_month_label})"
+        f"({start_month_label}–{end_month_label})"
     )
     axes[1].set_ylabel("Monthly incident count")
     axes[1].legend()
@@ -1131,7 +1153,7 @@ if len(X_test) > 0:
 
     axes[2].set_title(
         f"Monthly Traffic Incidents in {ilce_label}: Best Time-series Model vs Observed "
-        f"(TEST, {start_month_label}–{end_month_label})"
+        f"({start_month_label}–{end_month_label})"
     )
     axes[2].set_ylabel("Monthly incident count")
     axes[2].set_xlabel("Date")
@@ -1155,9 +1177,29 @@ if len(X_test) > 0:
     print(f"Neural network (MLP): MAPE={mape_nn_month_all:.2f}%, RMSE={rmse_nn_month_all:.2f}")
     print(f"Linear regression   : MAPE={mape_lin_month_all:.2f}%, RMSE={rmse_lin_month_all:.2f}")
 
-    if (mape_ts_month_all is not None) and (best_ts_name is not None) and (rmse_ts_month_all is not None):
-        print(f"{best_ts_name} time-series model: "
-              f"MAPE={mape_ts_month_all:.2f}%, RMSE={rmse_ts_month_all:.2f}")
+    # Zaman serisi modelini ve yapısını (p,d,q; P,D,Q,s) yaz
+    if best_ts_name is not None:
+        model_desc = best_ts_name
+
+        if best_ts_order is not None and best_ts_name in ("ARIMA", "Auto-ARIMA", "SARIMA", "Auto-SARIMA"):
+            p, d, q = best_ts_order
+
+            if best_ts_name in ("ARIMA", "Auto-ARIMA"):
+                model_desc = f"ARIMA(p={p}, d={d}, q={q})"
+            else:
+                if (best_ts_seasonal_order is not None) and (len(best_ts_seasonal_order) == 4):
+                    P, D, Q, s = best_ts_seasonal_order
+                    model_desc = f"SARIMA(p={p}, d={d}, q={q}; P={P}, D={D}, Q={Q}, s={s})"
+                else:
+                    model_desc = f"SARIMA(p={p}, d={d}, q={q})"
+
+        if (mape_ts_month_all is not None) and (rmse_ts_month_all is not None):
+            print(
+                f"{model_desc} time-series model: "
+                f"MAPE={mape_ts_month_all:.2f}%, RMSE={rmse_ts_month_all:.2f}"
+            )
+        else:
+            print(f"{model_desc} time-series model: metrics not available (monthly TS metrics could not be computed)")
     else:
         print("Time-series model   : not available")
 
