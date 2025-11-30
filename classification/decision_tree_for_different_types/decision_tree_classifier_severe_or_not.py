@@ -219,6 +219,36 @@ best_model = grid.best_estimator_
 # ---------------------------------------------------------
 # 10) Dummy baseline
 # ---------------------------------------------------------
+dt_clf = best_model.named_steps["model"]
+ohe    = best_model.named_steps["preprocess"].named_transformers_["cat"]
+
+print("Tree criterion:", dt_clf.criterion)  # 'entropy' ise bilgi kazancı temelli
+
+# One-hot sonrası feature isimleri ve importance vektörü
+ohe_feature_names = ohe.get_feature_names_out(categorical_cols)
+importances = dt_clf.feature_importances_
+
+# Her bir OHE kolonunun önemini tabloya dök
+feat_imp = pd.Series(importances, index=ohe_feature_names)
+feat_imp_nonzero = feat_imp[feat_imp > 0].sort_values(ascending=False)
+
+print("\n=== Top 20 one-hot (kategori) bazlı önemler ===")
+print(feat_imp_nonzero.head(20))
+
+# OHE kolonlarını orijinal attribute'lara grupla
+def base_attr_name(ohe_name: str) -> str:
+    # 'AY_ADI_January' -> 'AY_ADI'
+    return ohe_name.split('_', 1)[0]
+
+attr_importances = feat_imp.groupby(base_attr_name).sum().sort_values(ascending=False)
+
+print("\n=== Özellik (attribute) bazlı toplam önemler ===")
+print(attr_importances)
+
+print("\nEn çok bilgi kazancı sağlayan ilk 10 attribute:")
+for attr, val in attr_importances.head(10).items():
+    print(f"- {attr}: {val:.4f}")
+
 dummy = DummyClassifier(strategy="most_frequent")
 dummy.fit(X_train, y_train)
 y_dummy = dummy.predict(X_test)
