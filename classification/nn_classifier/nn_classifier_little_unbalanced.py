@@ -1,6 +1,5 @@
 from path_getter import get_path_for_binned_directory_in
 
-import os
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
@@ -76,8 +75,7 @@ cols_to_drop = [
     "Condition",
     "SAAT",
     "KONUM",
-   
-
+    "CALISMA_DURUMU"
 ]
 
 cols_to_drop_existing = [c for c in cols_to_drop if c in df.columns]
@@ -122,42 +120,45 @@ print("\nKullanılacak feature kolonları:")
 print(feature_cols)
 
 # ---------------------------------------------------------
-# 6) 2160 pozitif + 2160 negatif ile TRAIN, kalanlardan 50–50 TEST
+# 6) Özel sampling:
+#    - Non-severe (0) için en fazla 3500 örnek kullan
+#    - Test: 617 severe (1) + 700 non-severe (0) hedefleniyor
 # ---------------------------------------------------------
-df_pos = df[df[target_col] == 1].sample(frac=1, random_state=42)  # shuffle
-df_neg = df[df[target_col] == 0].sample(frac=1, random_state=42)
+df_pos = df[df[target_col] == 1].sample(frac=1, random_state=42)  # severe
+df_neg_all = df[df[target_col] == 0].sample(frac=1, random_state=42)  # non-severe
 
 print("\nToplam pozitif (1) sayısı:", len(df_pos))
-print("Toplam negatif (0) sayısı:", len(df_neg))
+print("Toplam negatif (0) sayısı:", len(df_neg_all))
 
-requested_n_train_per_class = 2160
+# Non-severe tarafında toplam kullanılacak maksimum sayı
+max_neg_to_use = 3160
+n_neg_total = min(max_neg_to_use, len(df_neg_all))
+df_neg = df_neg_all.iloc[:n_neg_total]
 
-n_train_per_class = min(
-    requested_n_train_per_class,
-    len(df_pos) - 1,
-    len(df_neg) - 1
-)
+if n_neg_total < max_neg_to_use:
+    print(f"\nUYARI: Yeterli non-severe yok, 3500 yerine {n_neg_total} non-severe kullanılacak.")
 
-if n_train_per_class < requested_n_train_per_class:
-    print(
-        f"\nUYARI: Yeterli örnek olmadığı için eğitimde her sınıftan "
-        f"{requested_n_train_per_class} yerine {n_train_per_class} kullanılacak."
-    )
+# Test set için istenen sayılar
+desired_test_pos = 617
+desired_test_neg = 1000
 
-# TRAIN set
-train_pos = df_pos.iloc[:n_train_per_class]
-train_neg = df_neg.iloc[:n_train_per_class]
-train_df = pd.concat([train_pos, train_neg]).sample(frac=1, random_state=42)
+n_test_pos = min(desired_test_pos, len(df_pos))
+n_test_neg = min(desired_test_neg, len(df_neg))
 
-# Kalanlarla TEST seti
-test_pos_rem = df_pos.iloc[n_train_per_class:]
-test_neg_rem = df_neg.iloc[n_train_per_class:]
+if n_test_pos < desired_test_pos:
+    print(f"UYARI: Test için 617 severe yerine {n_test_pos} severe kullanılabilecek.")
+if n_test_neg < desired_test_neg:
+    print(f"UYARI: Test için 700 non-severe yerine {n_test_neg} non-severe kullanılabilecek.")
 
-n_test_per_class = min(len(test_pos_rem), len(test_neg_rem))
-
-test_pos = test_pos_rem.iloc[:n_test_per_class]
-test_neg = test_neg_rem.iloc[:n_test_per_class]
+# Test set
+test_pos = df_pos.iloc[:n_test_pos]
+test_neg = df_neg.iloc[:n_test_neg]
 test_df = pd.concat([test_pos, test_neg]).sample(frac=1, random_state=42)
+
+# Train set: geri kalan severe + geri kalan (3500 - test_neg) non-severe
+train_pos = df_pos.iloc[n_test_pos:]
+train_neg = df_neg.iloc[n_test_neg:]
+train_df = pd.concat([train_pos, train_neg]).sample(frac=1, random_state=42)
 
 print("\nTRAIN set boyutu:", len(train_df))
 print("  -> Pozitif (1):", train_df[target_col].sum())
@@ -166,20 +167,6 @@ print("  -> Negatif (0):", len(train_df) - train_df[target_col].sum())
 print("\nTEST set boyutu:", len(test_df))
 print("  -> Pozitif (1):", test_df[target_col].sum())
 print("  -> Negatif (0):", len(test_df) - test_df[target_col].sum())
-
-# ---------------------------------------------------------
-# 6.5) TRAIN ve TEST setlerini Excel'e kaydet
-# ---------------------------------------------------------
-output_dir = os.path.dirname(file_path)  # Orijinal verinin olduğu klasör
-
-train_out_path = os.path.join(output_dir, "train_dataset_balanced.xlsx")
-test_out_path  = os.path.join(output_dir, "test_dataset_balanced.xlsx")
-
-train_df.to_excel(train_out_path, index=False)
-test_df.to_excel(test_out_path, index=False)
-
-print(f"\nTRAIN dataset kaydedildi: {train_out_path}")
-print(f"TEST dataset kaydedildi:  {test_out_path}")
 
 # ---------------------------------------------------------
 # 7) X / y ayır

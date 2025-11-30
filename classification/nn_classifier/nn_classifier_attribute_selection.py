@@ -1,6 +1,5 @@
 from path_getter import get_path_for_binned_directory_in
 
-import os
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
@@ -14,6 +13,8 @@ import warnings
 
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
+
+from sklearn.feature_selection import SequentialFeatureSelector  # SFS
 
 # MLP'nin convergence uyarılarını susturmak istersen:
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
@@ -76,8 +77,7 @@ cols_to_drop = [
     "Condition",
     "SAAT",
     "KONUM",
-   
-
+    "CALISMA_DURUMU"
 ]
 
 cols_to_drop_existing = [c for c in cols_to_drop if c in df.columns]
@@ -118,7 +118,7 @@ feature_cols = [
     if c != target_col and not c.startswith("KAZA_TIPI")
 ]
 
-print("\nKullanılacak feature kolonları:")
+print("\nKullanılacak feature kolonları (SFS öncesi):")
 print(feature_cols)
 
 # ---------------------------------------------------------
@@ -168,20 +168,6 @@ print("  -> Pozitif (1):", test_df[target_col].sum())
 print("  -> Negatif (0):", len(test_df) - test_df[target_col].sum())
 
 # ---------------------------------------------------------
-# 6.5) TRAIN ve TEST setlerini Excel'e kaydet
-# ---------------------------------------------------------
-output_dir = os.path.dirname(file_path)  # Orijinal verinin olduğu klasör
-
-train_out_path = os.path.join(output_dir, "train_dataset_balanced.xlsx")
-test_out_path  = os.path.join(output_dir, "test_dataset_balanced.xlsx")
-
-train_df.to_excel(train_out_path, index=False)
-test_df.to_excel(test_out_path, index=False)
-
-print(f"\nTRAIN dataset kaydedildi: {train_out_path}")
-print(f"TEST dataset kaydedildi:  {test_out_path}")
-
-# ---------------------------------------------------------
 # 7) X / y ayır
 # ---------------------------------------------------------
 X_train = train_df[feature_cols]
@@ -194,7 +180,74 @@ print("\nX_train shape:", X_train.shape)
 print("X_test shape:", X_test.shape)
 
 # ---------------------------------------------------------
-# 8) One-Hot Encoding tanımı
+# 7.5) SFS: One-Hot'tan ÖNCE kolon seçimi
+#       (Her bir orijinal kolon bir feature olarak düşünülüyor.)
+#       -> SFS için kategorikleri geçici olarak integer koda çeviriyoruz.
+# ---------------------------------------------------------
+print("\nSequential Feature Selector başlıyor...")
+
+# SFS için kullanılacak X (geçici, sadece SFS içindir)
+X_train_for_sfs = X_train[feature_cols].copy()
+
+# Tüm kolonları kategorik koda çevir (string, int vs fark etmez hepsi numeric olsun)
+for col in feature_cols:
+    X_train_for_sfs[col] = (
+        X_train_for_sfs[col]
+        .astype("category")
+        .cat.codes
+    )
+
+# Eksiklere -1 verelim (cat.codes zaten -1 verebilir, garanti olsun)
+X_train_for_sfs = X_train_for_sfs.fillna(-1)
+
+# SFS için kaç feature seçilecek? (feature sayısından küçük olmalı)
+n_features_total = X_train_for_sfs.shape[1]
+# Örneğin en fazla 8, ama mutlaka < n_features
+n_features_to_select = 8
+
+print(f"SFS n_features_to_select: {n_features_to_select} / total: {n_features_total}")
+
+sfs_base_mlp = MLPClassifier(
+    activation="relu",
+    solver="adam",
+    random_state=42,
+    max_iter=200,
+    early_stopping=True,
+    n_iter_no_change=5,
+    validation_fraction=0.1,
+)
+
+sfs = SequentialFeatureSelector(
+    estimator=sfs_base_mlp,
+    n_features_to_select=n_features_to_select,
+    direction="forward",
+    scoring=make_scorer(f1_score, pos_label=1),
+    cv=5,
+    n_jobs=-1
+)
+
+# BURADA ARTIK numeric array veriyoruz
+sfs.fit(X_train_for_sfs.values, y_train)
+
+support_mask = sfs.get_support()
+selected_feature_cols = [
+    col for col, keep in zip(feature_cols, support_mask) if keep
+]
+
+print("\nSFS ile seçilen feature kolonları:")
+print(selected_feature_cols)
+
+# Bundan sonra sadece seçilen kolonları kullanacağız
+feature_cols = selected_feature_cols
+
+X_train = train_df[feature_cols]
+X_test = test_df[feature_cols]
+
+print("\nSFS sonrası X_train shape:", X_train.shape)
+print("SFS sonrası X_test shape:", X_test.shape)
+
+# ---------------------------------------------------------
+# 8) One-Hot Encoding tanımı (SFS sonrası kolonlar)
 # ---------------------------------------------------------
 categorical_cols = X_train.columns.tolist()
 

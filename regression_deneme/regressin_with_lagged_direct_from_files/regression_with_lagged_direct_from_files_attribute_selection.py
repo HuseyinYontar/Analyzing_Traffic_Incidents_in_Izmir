@@ -1,6 +1,5 @@
 from path_getter import get_path_for_binned_directory_in
 
-import os
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
@@ -14,6 +13,12 @@ import warnings
 
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
+
+# 🔹 YENİ: Sequential Feature Selector
+from sklearn.feature_selection import SequentialFeatureSelector
+
+# 🔹 YENİ: Kaydetmek için
+from pathlib import Path
 
 # MLP'nin convergence uyarılarını susturmak istersen:
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
@@ -76,8 +81,6 @@ cols_to_drop = [
     "Condition",
     "SAAT",
     "KONUM",
-   
-
 ]
 
 cols_to_drop_existing = [c for c in cols_to_drop if c in df.columns]
@@ -168,20 +171,6 @@ print("  -> Pozitif (1):", test_df[target_col].sum())
 print("  -> Negatif (0):", len(test_df) - test_df[target_col].sum())
 
 # ---------------------------------------------------------
-# 6.5) TRAIN ve TEST setlerini Excel'e kaydet
-# ---------------------------------------------------------
-output_dir = os.path.dirname(file_path)  # Orijinal verinin olduğu klasör
-
-train_out_path = os.path.join(output_dir, "train_dataset_balanced.xlsx")
-test_out_path  = os.path.join(output_dir, "test_dataset_balanced.xlsx")
-
-train_df.to_excel(train_out_path, index=False)
-test_df.to_excel(test_out_path, index=False)
-
-print(f"\nTRAIN dataset kaydedildi: {train_out_path}")
-print(f"TEST dataset kaydedildi:  {test_out_path}")
-
-# ---------------------------------------------------------
 # 7) X / y ayır
 # ---------------------------------------------------------
 X_train = train_df[feature_cols]
@@ -197,6 +186,7 @@ print("X_test shape:", X_test.shape)
 # 8) One-Hot Encoding tanımı
 # ---------------------------------------------------------
 categorical_cols = X_train.columns.tolist()
+print("\nKategori (input) kolon sayısı:", len(categorical_cols))
 
 preprocess = ColumnTransformer(
     transformers=[
@@ -206,8 +196,13 @@ preprocess = ColumnTransformer(
 )
 
 # ---------------------------------------------------------
-# 9) GridSearch için MLP pipeline
+# 9) MLP + Sequential Feature Selector + GridSearch
 # ---------------------------------------------------------
+
+# Ağır kazanın F1'i önemli:
+scorer = make_scorer(f1_score, pos_label=1)
+
+# MLP taban modeli
 mlp_base = MLPClassifier(
     activation="relu",
     solver="adam",
@@ -218,22 +213,36 @@ mlp_base = MLPClassifier(
     validation_fraction=0.1,
 )
 
+# 🔹 Sequential Feature Selector
+sfs = SequentialFeatureSelector(
+    estimator=mlp_base,
+    n_features_to_select="auto",   # istersen buraya sabit sayı da verebilirsin
+    direction="forward",
+    scoring=scorer,
+    cv=3,
+    n_jobs=-1
+)
+
+# Pipeline: preprocess -> SFS (içinde MLP)
 pipe = Pipeline(
     steps=[
         ("preprocess", preprocess),
-        ("model", mlp_base),
+        ("sfs", sfs),
     ]
 )
 
+# DİKKAT: Artık parametreler SFS içindeki MLP'ye ait, o yüzden
+# sfs__estimator__... şeklinde isimlendiriliyor.
 param_grid = {
-    "model__hidden_layer_sizes": [
+    "sfs__estimator__hidden_layer_sizes": [
+        (32,),
+        (64,),
+        (64, 32),
         (96, 48),
     ],
-    "model__alpha": [1e-5, 1e-4, 1e-3],
-    "model__learning_rate_init": [0.001, 0.0005, 0.002, 0.0001],
+    "sfs__estimator__alpha": [1e-5, 1e-4, 1e-3],
+    "sfs__estimator__learning_rate_init": [0.001, 0.0005, 0.002, 0.0001],
 }
-
-scorer = make_scorer(f1_score, pos_label=1)  # ağır kazanın F1'i önemli
 
 grid = GridSearchCV(
     estimator=pipe,
@@ -244,7 +253,7 @@ grid = GridSearchCV(
     verbose=2,
 )
 
-print("\nGridSearchCV başlıyor...")
+print("\nGridSearchCV + SFS başlıyor...")
 grid.fit(X_train, y_train)
 
 print("\nEn iyi parametreler:", grid.best_params_)
@@ -253,11 +262,53 @@ print("CV en iyi F1 (class 1):", grid.best_score_)
 best_model = grid.best_estimator_
 
 # ---------------------------------------------------------
-# 10) Test set performansı (best model ile)
+# 10) SFS ile seçilen feature'lar: print + CSV
+# ---------------------------------------------------------
+print("\n=== SFS Sonuçları (Best Model) ===")
+preprocess_best = best_model.named_steps["preprocess"]
+sfs_best = best_model.named_steps["sfs"]
+
+# One-hot sonrası feature isimleri
+feature_names = preprocess_best.get_feature_names_out(categorical_cols)
+support_mask = sfs_best.get_support()
+selected_feature_names = feature_names[support_mask]
+
+print("\nToplam one-hot feature sayısı:", len(feature_names))
+print("Seçilen feature sayısı:", support_mask.sum())
+
+print("\nSeçilen feature isimleri (ilk 50 tane):")
+for name in selected_feature_names[:50]:
+    print("  -", name)
+if len(selected_feature_names) > 50:
+    print(f"... (toplam {len(selected_feature_names)} feature seçildi)")
+
+# Kaydetmek için klasör
+output_dir = Path(file_path).parent
+
+# 1) Feature seçim bilgisi CSV
+df_selected = pd.DataFrame({
+    "feature_name": feature_names,
+    "selected_by_sfs": support_mask.astype(int)
+})
+feature_csv_path = output_dir / "mlp_sfs_selected_features.csv"
+df_selected.to_csv(feature_csv_path, index=False, encoding="utf-8-sig")
+print(f"\nSeçilen feature bilgisi CSV olarak kaydedildi: {feature_csv_path}")
+
+# ---------------------------------------------------------
+# 11) Test set performansı (best model ile) + tahminleri CSV'ye kaydet
 # ---------------------------------------------------------
 y_pred = best_model.predict(X_test)
 
-print("\n=== MLP (Best GridSearch Model) Results ===")
+print("\n=== MLP + SFS (Best GridSearch Model) Results ===")
 print("Accuracy:", accuracy_score(y_test, y_pred))
 print("\nClassification report:\n", classification_report(y_test, y_pred))
 print("Confusion matrix:\n", confusion_matrix(y_test, y_pred))
+
+# 2) Test set tahminleri CSV
+results_df = X_test.copy()
+results_df[target_col] = y_test.values
+results_df["y_pred"] = y_pred
+
+pred_csv_path = output_dir / "mlp_sfs_test_predictions.csv"
+results_df.to_csv(pred_csv_path, index=False, encoding="utf-8-sig")
+print(f"\nTest set tahminleri CSV olarak kaydedildi: {pred_csv_path}")
