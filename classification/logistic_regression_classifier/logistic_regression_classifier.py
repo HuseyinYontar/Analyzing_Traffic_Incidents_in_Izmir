@@ -1,19 +1,19 @@
 from path_getter import get_path_for_binned_directory_in
 
-import os
 import pandas as pd
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
-from sklearn.dummy import DummyClassifier
 
-from sklearn.neural_network import MLPClassifier
 from sklearn.exceptions import ConvergenceWarning
 import warnings
 
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
+
+# --- YENİ: LogisticRegression importu ---
+from sklearn.linear_model import LogisticRegression
 
 # MLP'nin convergence uyarılarını susturmak istersen:
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
@@ -76,8 +76,7 @@ cols_to_drop = [
     "Condition",
     "SAAT",
     "KONUM",
-   
-
+    "CALISMA_DURUMU"
 ]
 
 cols_to_drop_existing = [c for c in cols_to_drop if c in df.columns]
@@ -168,20 +167,6 @@ print("  -> Pozitif (1):", test_df[target_col].sum())
 print("  -> Negatif (0):", len(test_df) - test_df[target_col].sum())
 
 # ---------------------------------------------------------
-# 6.5) TRAIN ve TEST setlerini Excel'e kaydet
-# ---------------------------------------------------------
-output_dir = os.path.dirname(file_path)  # Orijinal verinin olduğu klasör
-
-train_out_path = os.path.join(output_dir, "train_dataset_balanced.xlsx")
-test_out_path  = os.path.join(output_dir, "test_dataset_balanced.xlsx")
-
-train_df.to_excel(train_out_path, index=False)
-test_df.to_excel(test_out_path, index=False)
-
-print(f"\nTRAIN dataset kaydedildi: {train_out_path}")
-print(f"TEST dataset kaydedildi:  {test_out_path}")
-
-# ---------------------------------------------------------
 # 7) X / y ayır
 # ---------------------------------------------------------
 X_train = train_df[feature_cols]
@@ -206,31 +191,26 @@ preprocess = ColumnTransformer(
 )
 
 # ---------------------------------------------------------
-# 9) GridSearch için MLP pipeline
+# 9) GridSearch için LOGISTIC REGRESSION pipeline
 # ---------------------------------------------------------
-mlp_base = MLPClassifier(
-    activation="relu",
-    solver="adam",
+log_reg_base = LogisticRegression(
+    solver="saga",        # sparse + çok feature için uygun
+    penalty="l2",
     random_state=42,
-    max_iter=300,
-    early_stopping=True,
-    n_iter_no_change=10,
-    validation_fraction=0.1,
+    max_iter=5000,
+    n_jobs=-1
 )
 
 pipe = Pipeline(
     steps=[
         ("preprocess", preprocess),
-        ("model", mlp_base),
+        ("model", log_reg_base),
     ]
 )
 
 param_grid = {
-    "model__hidden_layer_sizes": [
-        (96, 48),
-    ],
-    "model__alpha": [1e-5, 1e-4, 1e-3],
-    "model__learning_rate_init": [0.001, 0.0005, 0.002, 0.0001],
+    "model__C": [0.01, 0.1, 1.0, 10.0],
+    "model__class_weight": [None, "balanced"]
 }
 
 scorer = make_scorer(f1_score, pos_label=1)  # ağır kazanın F1'i önemli
@@ -244,7 +224,7 @@ grid = GridSearchCV(
     verbose=2,
 )
 
-print("\nGridSearchCV başlıyor...")
+print("\nLogistic Regression GridSearchCV başlıyor...")
 grid.fit(X_train, y_train)
 
 print("\nEn iyi parametreler:", grid.best_params_)
@@ -257,7 +237,7 @@ best_model = grid.best_estimator_
 # ---------------------------------------------------------
 y_pred = best_model.predict(X_test)
 
-print("\n=== MLP (Best GridSearch Model) Results ===")
+print("\n=== Logistic Regression (Best GridSearch Model) Results ===")
 print("Accuracy:", accuracy_score(y_test, y_pred))
 print("\nClassification report:\n", classification_report(y_test, y_pred))
 print("Confusion matrix:\n", confusion_matrix(y_test, y_pred))
