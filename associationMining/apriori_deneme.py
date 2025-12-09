@@ -19,7 +19,7 @@ for _, row in df[cols_for_ar].iterrows():
     items = []
     for col in cols_for_ar:
         val = str(row[col]).strip()
-        if val.lower() != "nan" and val != "" and val.lower() != "arıza":
+        if val.lower() != "nan" and val != "": #and val.lower() != "arıza":
             items.append(f"{col}={val}")
     transactions.append(items)
 
