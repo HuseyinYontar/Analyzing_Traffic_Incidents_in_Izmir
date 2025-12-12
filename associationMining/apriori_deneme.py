@@ -10,7 +10,8 @@ cols_for_ar = [
     "MEVSIM",
     # "MUDAHALE_SINIFI",
     "SAAT_ARALIGI",
-    "KAZA_TIPI"
+    "KAZA_TIPI",
+    "ILCE"
 ]
 
 transactions = []
