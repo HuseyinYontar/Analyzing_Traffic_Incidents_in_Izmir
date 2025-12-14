@@ -1,60 +1,159 @@
 from path_getter import get_path_for_binned_directory_in
 
+import os
 import pandas as pd
+
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.dummy import DummyClassifier
 
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier, plot_tree, export_text
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
 
-# ---- EKLENEN İMPORTLAR (AĞAÇ ÇİZİMİ VE KURAL YAZIMI İÇİN) ----
-from sklearn.tree import plot_tree, export_text
 import matplotlib.pyplot as plt
-# ---------------------------------------------------------------
-# ---------------------------------------------------------
-# 1) Veri setini yükle
-# ---------------------------------------------------------
-file_path = get_path_for_binned_directory_in()
+
+
+# =========================================================
+# 0) ENGLISH MAPPINGS (extend as needed)
+# =========================================================
+MONTH_MAP = {
+    1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
+    7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"
+}
+DOW_MAP = {
+    0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday",
+    4: "Friday", 5: "Saturday", 6: "Sunday"
+}
+
+# Translate common Turkish category values -> English (add your dataset-specific ones here)
+VAL_MAP = {
+    "Kış": "Winter",
+    "İlkbahar": "Spring",
+    "Yaz": "Summer",
+    "Sonbahar": "Autumn",
+    "Bilinmiyor": "Unknown",
+    "Bilinmeyen": "Unknown",
+    "Evet": "Yes",
+    "Hayır": "No",
+    "Kadın": "Female",
+    "Erkek": "Male",
+    "Yaralanmalı/Ölümlü": "Injury/Fatal",
+    "Diğer": "Other",
+    "Mürselpaşa Bulvarı":"Mürselpaşa Boulevard",
+    "İnönü Caddesi":"İnönü Street",
+    "Yeşildere Caddesi":"Yeşildere Street"
+}
+
+# Translate base feature names shown in the tree
+BASE_MAP = {
+    "AY_ADI": "Month",
+    "GUN_BILGISI": "DayOfWeek",
+    "SAAT_ARALIGI_STR": "TimeInterval",
+    "ILCE": "District",
+    "MEVSIM": "Season",
+    "CADDE": "Street",
+    "SAAT_ARALIGI" : "TimeIntervalBin"
+}
+
+
+# =========================================================
+# Helpers
+# =========================================================
+def resolve_excel_path(fp):
+    """
+    Makes pd.read_excel robust against path_getter returning list/tuple, etc.
+    Picks the first Excel-like path if a list is returned.
+    """
+    if isinstance(fp, (list, tuple)):
+        if len(fp) == 0:
+            raise ValueError("get_path_for_binned_directory_in() returned an empty list/tuple.")
+        for p in fp:
+            if isinstance(p, str) and p.lower().endswith((".xlsx", ".xls", ".xlsm")):
+                return p
+        # fallback to first element
+        return fp[0]
+    return fp
+
+
+def hour_to_interval(dt):
+    if pd.isna(dt):
+        return pd.NA
+    h = dt.hour
+    h_next = (h + 1) % 24
+    return f"{h:02d}:00-{h_next:02d}:00"
+
+
+def split_ohe_name(ohe_name: str, original_cols):
+    """
+    Robustly split an OHE feature name into (base_col, value),
+    even if base_col contains underscores.
+
+    Example:
+      ohe_name = "SAAT_ARALIGI_STR_20:00-21:00"
+      -> base = "SAAT_ARALIGI_STR", val="20:00-21:00"
+    """
+    candidates = [c for c in original_cols if ohe_name.startswith(c + "_") or ohe_name == c]
+    if candidates:
+        base = max(candidates, key=len)
+        if ohe_name == base:
+            return base, None
+        val = ohe_name[len(base) + 1:]  # skip base + "_"
+        return base, val
+
+    # fallback if nothing matches
+    if "_" in ohe_name:
+        base, val = ohe_name.split("_", 1)
+        return base, val
+    return ohe_name, None
+
+
+def translate_ohe_name(ohe_name: str, original_cols):
+    base, val = split_ohe_name(ohe_name, original_cols)
+    base_en = BASE_MAP.get(base, base)
+    if val is None:
+        return base_en
+    val_en = VAL_MAP.get(val, val)
+    return f"{base_en}={val_en}"
+
+
+# =========================================================
+# 1) Load data
+# =========================================================
+file_path_raw = get_path_for_binned_directory_in()
+file_path = resolve_excel_path(file_path_raw)
+
+print("Resolved file_path:", file_path)
+if isinstance(file_path, str) and os.path.exists(file_path) is False:
+    print("WARNING: Path does not exist on disk. If this is expected, ignore.")
 df = pd.read_excel(file_path)
 
 print("Raw shape:", df.shape)
 print("Columns:", df.columns.tolist())
 
-# ---------------------------------------------------------
-# 2) TARIH ve KAZA_ZAMANI'ndan yeni feature'lar üret
-# ---------------------------------------------------------
+
+# =========================================================
+# 2) Engineer time/date features in ENGLISH
+# =========================================================
 if "TARIH" in df.columns:
     df["TARIH"] = pd.to_datetime(df["TARIH"], errors="coerce")
-    df["AY_ADI"] = df["TARIH"].dt.month_name().fillna("Unknown")
-    df["GUN_BILGISI"] = df["TARIH"].dt.day_name().fillna("Unknown")
+    df["AY_ADI"] = df["TARIH"].dt.month.map(MONTH_MAP).fillna("Unknown")
+    df["GUN_BILGISI"] = df["TARIH"].dt.dayofweek.map(DOW_MAP).fillna("Unknown")
 else:
-    print("UYARI: 'TARIH' kolonu bulunamadı, AY_ADI / GUN_BILGISI oluşturulamadı.")
+    print("WARNING: 'TARIH' column not found -> AY_ADI / GUN_BILGISI not created.")
 
 if "KAZA_ZAMANI" in df.columns:
     df["KAZA_ZAMANI"] = pd.to_datetime(df["KAZA_ZAMANI"], errors="coerce")
-
-    def hour_to_interval(dt):
-        if pd.isna(dt):
-            return pd.NA
-        h = dt.hour
-        h_next = (h + 1) % 24
-        return f"{h:02d}:00-{h_next:02d}:00"
-
     df["SAAT_ARALIGI_STR"] = df["KAZA_ZAMANI"].apply(hour_to_interval)
 else:
-    print("UYARI: 'KAZA_ZAMANI' kolonu bulunamadı, SAAT_ARALIGI_STR oluşturulamadı.")
+    print("WARNING: 'KAZA_ZAMANI' column not found -> SAAT_ARALIGI_STR not created.")
 
-print("\nÖrnek AY_ADI:", df.get("AY_ADI", pd.Series()).unique()[:10])
-print("Örnek GUN_BILGISI:", df.get("GUN_BILGISI", pd.Series()).unique()[:10])
-print("Örnek SAAT_ARALIGI_STR:", df.get("SAAT_ARALIGI_STR", pd.Series()).unique()[:10])
 
-# ---------------------------------------------------------
-# 3) Kullanmak istemediğin kolonları düş
-# ---------------------------------------------------------
+# =========================================================
+# 3) Drop unwanted columns
+# =========================================================
 cols_to_drop = [
     "TARIH",
     "TUR",
@@ -66,21 +165,22 @@ cols_to_drop = [
     "Temperature",
     "Condition",
     "SAAT",
-    "KONUM"
+    "KONUM",
 ]
 
-cols_to_drop_existing = [c for c in cols_to_drop if c in df.columns]
-df = df.drop(columns=cols_to_drop_existing)
+df = df.drop(columns=[c for c in cols_to_drop if c in df.columns])
+print("\nColumns after drop:", df.columns.tolist())
 
-print("\nDrop sonrası kolonlar:", df.columns.tolist())
 
-# ---------------------------------------------------------
-# 4) Binary hedef değişkeni oluştur
-# ---------------------------------------------------------
+# =========================================================
+# 4) Build binary target
+# =========================================================
+if "KAZA_TIPI" not in df.columns:
+    raise KeyError("KAZA_TIPI column is missing. Check your input file / preprocessing.")
+
 df = df.dropna(subset=["KAZA_TIPI"])
 
-target_col = "KAZA_TIPI_Yaralanmalı/Ölümlü"
-
+target_col = "KAZA_TIPI_InjuryOrFatal"
 df[target_col] = (
     df["KAZA_TIPI"]
     .astype(str)
@@ -89,105 +189,73 @@ df[target_col] = (
     .astype(int)
 )
 
-print("\nTarget value counts (0: diğer, 1: Yaralanmalı/Ölümlü):")
+print("\nTarget value counts (0=Other, 1=Injury/Fatal):")
 print(df[target_col].value_counts())
 
-# ---------------------------------------------------------
-# 5) Feature kolonlarını seç
-# ---------------------------------------------------------
+
+# =========================================================
+# 5) Select features (exclude KAZA_TIPI* columns)
+# =========================================================
 all_cols = df.columns.tolist()
-kaza_tipi_cols = [c for c in all_cols if c.startswith("KAZA_TIPI")]
-
-print("\nKAZA_TIPI ile başlayan kolonlar (feature'lardan çıkarılacak):")
-print(kaza_tipi_cols)
-
-feature_cols = [
-    c for c in all_cols
-    if c != target_col and not c.startswith("KAZA_TIPI")
-]
-
-print("\nKullanılacak feature kolonları:")
+feature_cols = [c for c in all_cols if c != target_col and not c.startswith("KAZA_TIPI")]
+print("\nFeature columns used:")
 print(feature_cols)
 
-# ---------------------------------------------------------
-# 6) 2160 pozitif + 2160 negatif ile TRAIN, kalanlardan TEST
-# ---------------------------------------------------------
+
+# =========================================================
+# 6) Balanced split: 2160 pos + 2160 neg for TRAIN, rest for TEST
+# =========================================================
 df_pos = df[df[target_col] == 1].sample(frac=1, random_state=42)
 df_neg = df[df[target_col] == 0].sample(frac=1, random_state=42)
 
-print("\nToplam pozitif (1) sayısı:", len(df_pos))
-print("Toplam negatif (0) sayısı:", len(df_neg))
-
 requested_n_train_per_class = 2160
-
-n_train_per_class = min(
-    requested_n_train_per_class,
-    len(df_pos) - 1,
-    len(df_neg) - 1
-)
+n_train_per_class = min(requested_n_train_per_class, len(df_pos) - 1, len(df_neg) - 1)
 
 if n_train_per_class < requested_n_train_per_class:
     print(
-        f"\nUYARI: Yeterli örnek olmadığı için eğitimde her sınıftan "
-        f"{requested_n_train_per_class} yerine {n_train_per_class} kullanılacak."
+        f"\nWARNING: Not enough samples. Using {n_train_per_class} per class in TRAIN "
+        f"instead of {requested_n_train_per_class}."
     )
 
-train_pos = df_pos.iloc[:n_train_per_class]
-train_neg = df_neg.iloc[:n_train_per_class]
-train_df = pd.concat([train_pos, train_neg]).sample(frac=1, random_state=42)
+train_df = pd.concat([df_pos.iloc[:n_train_per_class], df_neg.iloc[:n_train_per_class]]).sample(frac=1, random_state=42)
 
 test_pos_rem = df_pos.iloc[n_train_per_class:]
 test_neg_rem = df_neg.iloc[n_train_per_class:]
-
 n_test_per_class = min(len(test_pos_rem), len(test_neg_rem))
 
-test_pos = test_pos_rem.iloc[:n_test_per_class]
-test_neg = test_neg_rem.iloc[:n_test_per_class]
-test_df = pd.concat([test_pos, test_neg]).sample(frac=1, random_state=42)
+test_df = pd.concat([test_pos_rem.iloc[:n_test_per_class], test_neg_rem.iloc[:n_test_per_class]]).sample(frac=1, random_state=42)
 
-print("\nTRAIN set boyutu:", len(train_df))
-print("  -> Pozitif (1):", train_df[target_col].sum())
-print("  -> Negatif (0):", len(train_df) - train_df[target_col].sum())
+print("\nTRAIN size:", len(train_df), " | pos:", int(train_df[target_col].sum()), " | neg:", int(len(train_df) - train_df[target_col].sum()))
+print("TEST  size:", len(test_df),  " | pos:", int(test_df[target_col].sum()),  " | neg:", int(len(test_df) - test_df[target_col].sum()))
 
-print("\nTEST set boyutu:", len(test_df))
-print("  -> Pozitif (1):", test_df[target_col].sum())
-print("  -> Negatif (0):", len(test_df) - test_df[target_col].sum())
 
-# ---------------------------------------------------------
-# 7) X / y ayır
-# ---------------------------------------------------------
+# =========================================================
+# 7) X / y
+# =========================================================
 X_train = train_df[feature_cols]
 y_train = train_df[target_col]
-
 X_test = test_df[feature_cols]
 y_test = test_df[target_col]
 
-print("\nX_train shape:", X_train.shape)
-print("X_test shape:", X_test.shape)
 
-# ---------------------------------------------------------
-# 8) One-Hot Encoding
-# ---------------------------------------------------------
+# =========================================================
+# 8) One-Hot Encoding (all categorical, like your setup)
+# =========================================================
 categorical_cols = X_train.columns.tolist()
 
 preprocess = ColumnTransformer(
-    transformers=[
-        ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_cols)
-    ],
-    remainder="drop"
+    transformers=[("cat", OneHotEncoder(handle_unknown="ignore"), categorical_cols)],
+    remainder="drop",
 )
 
-# ---------------------------------------------------------
-# 9) Decision Tree pipeline + GridSearch
-# ---------------------------------------------------------
-dt_base = DecisionTreeClassifier(random_state=42)
 
-pipe = Pipeline(
-    steps=[
-        ("preprocess", preprocess),
-        ("model", dt_base),
-    ]
-)
+# =========================================================
+# 9) Decision Tree + GridSearch
+# =========================================================
+pipe = Pipeline(steps=[
+    ("preprocess", preprocess),
+    ("model", DecisionTreeClassifier(random_state=42)),
+])
 
 param_grid = {
     "model__criterion": ["gini", "entropy"],
@@ -197,110 +265,84 @@ param_grid = {
     "model__max_features": [None, "sqrt"],
 }
 
-scorer = make_scorer(f1_score, pos_label=1)
-
 grid = GridSearchCV(
     estimator=pipe,
     param_grid=param_grid,
-    scoring=scorer,
+    scoring=make_scorer(f1_score, pos_label=1),
     cv=5,
     n_jobs=-1,
     verbose=2,
 )
 
-print("\nGridSearchCV (Decision Tree) başlıyor...")
+print("\nGridSearchCV (Decision Tree) starting...")
 grid.fit(X_train, y_train)
 
-print("\nEn iyi parametreler:", grid.best_params_)
-print("CV en iyi F1 (class 1):", grid.best_score_)
+print("\nBest parameters:", grid.best_params_)
+print("Best CV F1 (class 1):", grid.best_score_)
 
 best_model = grid.best_estimator_
 
-# ---------------------------------------------------------
+
+# =========================================================
 # 10) Dummy baseline
-# ---------------------------------------------------------
-dt_clf = best_model.named_steps["model"]
-ohe    = best_model.named_steps["preprocess"].named_transformers_["cat"]
-
-print("Tree criterion:", dt_clf.criterion)  # 'entropy' ise bilgi kazancı temelli
-
-# One-hot sonrası feature isimleri ve importance vektörü
-ohe_feature_names = ohe.get_feature_names_out(categorical_cols)
-importances = dt_clf.feature_importances_
-
-# Her bir OHE kolonunun önemini tabloya dök
-feat_imp = pd.Series(importances, index=ohe_feature_names)
-feat_imp_nonzero = feat_imp[feat_imp > 0].sort_values(ascending=False)
-
-print("\n=== Top 20 one-hot (kategori) bazlı önemler ===")
-print(feat_imp_nonzero.head(20))
-
-# OHE kolonlarını orijinal attribute'lara grupla
-def base_attr_name(ohe_name: str) -> str:
-    # 'AY_ADI_January' -> 'AY_ADI'
-    return ohe_name.split('_', 1)[0]
-
-attr_importances = feat_imp.groupby(base_attr_name).sum().sort_values(ascending=False)
-
-print("\n=== Özellik (attribute) bazlı toplam önemler ===")
-print(attr_importances)
-
-print("\nEn çok bilgi kazancı sağlayan ilk 10 attribute:")
-for attr, val in attr_importances.head(10).items():
-    print(f"- {attr}: {val:.4f}")
-
+# =========================================================
 dummy = DummyClassifier(strategy="most_frequent")
 dummy.fit(X_train, y_train)
 y_dummy = dummy.predict(X_test)
 
 print("\n=== Dummy Baseline (Most Frequent Class) ===")
 print("Accuracy:", accuracy_score(y_test, y_dummy))
-print("Classification report:\n", classification_report(y_test, y_dummy))
 print("Confusion matrix:\n", confusion_matrix(y_test, y_dummy))
 
-# ---------------------------------------------------------
-# 11) Test set performansı
-# ---------------------------------------------------------
+
+# =========================================================
+# 11) Test performance
+# =========================================================
 y_pred = best_model.predict(X_test)
 
 print("\n=== Decision Tree (Best GridSearch Model) Results ===")
 print("Accuracy:", accuracy_score(y_test, y_pred))
-print("\nClassification report:\n", classification_report(y_test, y_pred))
+print("Classification report:\n", classification_report(y_test, y_pred))
 print("Confusion matrix:\n", confusion_matrix(y_test, y_pred))
 
-from sklearn.tree import plot_tree
-import matplotlib.pyplot as plt
 
-# ---------------------------------------------------------
-# 12) Karar ağacını görselleştir ve PDF olarak kaydet
-# ---------------------------------------------------------
+# =========================================================
+# 12) ENGLISH tree plotting + ENGLISH rule export
+# =========================================================
+dt_clf = best_model.named_steps["model"]
+ohe = best_model.named_steps["preprocess"].named_transformers_["cat"]
 
-# Pipeline içinden bileşenleri al
-dt_clf = best_model.named_steps["model"]          # DecisionTreeClassifier
-ohe    = best_model.named_steps["preprocess"].named_transformers_["cat"]
+ohe_feature_names = ohe.get_feature_names_out(categorical_cols)
+feature_names_en = [translate_ohe_name(n, categorical_cols) for n in ohe_feature_names]
+class_names_en = ["Other", "Injury/Fatal"]
 
-# One-Hot sonrası feature isimleri (her kategori için ayrı kolon)
-feature_names = ohe.get_feature_names_out(categorical_cols)
-
-# Sınıf isimleri (0 ve 1 için)
-class_names = ["Other", "Injury/Fatal"]  # veya ["Diğer", "Yaralanmalı/Ölümlü"]
-
-# Büyük bir figür yap ki makaleye koyunca net olsun
-plt.figure(figsize=(80, 40))  # gerekirse daha da büyütebilirsin
-
+# A) Full tree (very large)
+plt.figure(figsize=(80, 40))
 plot_tree(
     dt_clf,
-    feature_names=feature_names,
-    class_names=class_names,
+    feature_names=feature_names_en,
+    class_names=class_names_en,
     filled=True,
     rounded=True,
     fontsize=8,
 )
-
 plt.tight_layout()
-
-# PDF olarak kaydet
-plt.savefig(f"decision_tree_full.pdf", format="pdf", bbox_inches="tight")
+plt.savefig("decision_tree_full_EN.pdf", format="pdf", bbox_inches="tight")
 plt.close()
+print("Saved: decision_tree_full_EN.pdf")
 
-print("Karar ağacı 'decision_tree_full.pdf' olarak kaydedildi.")
+# B) Top of tree (paper-friendly)
+plt.figure(figsize=(20, 10))
+plot_tree(
+    dt_clf,
+    feature_names=feature_names_en,
+    class_names=class_names_en,
+    filled=True,
+    rounded=True,
+    fontsize=10,
+    max_depth=3,
+)
+plt.tight_layout()
+plt.savefig("decision_tree_top3_EN.pdf", format="pdf", bbox_inches="tight")
+plt.close()
+print("Saved: decision_tree_top3_EN.pdf")

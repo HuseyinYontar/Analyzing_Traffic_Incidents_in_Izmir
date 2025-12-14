@@ -284,7 +284,7 @@ def cluster_heatmap_all_types(center_series, day_order, hours, types, title):
     plt.yticks(range(len(day_order)), day_order)
     plt.xticks(range(len(hours)), hours, rotation=90)
     plt.colorbar()
-    plt.title(title + " – Heatmap (Day×Hour, ALL types summed)")
+    plt.title(title + " – Heatmap")
     plt.tight_layout()
     return fig
 
@@ -322,7 +322,7 @@ def cluster_heatmaps_by_type(center_series, day_order, hours, types, title_prefi
 # =========================================================
 def main():
     # ================= USER CONTROL =================
-    N_CLUSTERS = 3
+    N_CLUSTERS = 5
     ILCE_MIN_COUNT = 200
     TOP_KAZA_TYPES = 3
     USE_SHAPE = True
