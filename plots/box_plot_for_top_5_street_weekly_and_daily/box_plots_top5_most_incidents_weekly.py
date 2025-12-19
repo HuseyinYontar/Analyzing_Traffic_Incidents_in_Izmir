@@ -38,7 +38,7 @@ df = df.dropna(subset=[date_col])
 top5 = (
     df[street_col]
     .value_counts()
-    .head(5)
+    .head(15)
     .index
     .tolist()
 )
@@ -102,7 +102,7 @@ plt.xticks(rotation=0, fontsize=14)
 
 # --- Save & Display ---
 out_path = Path("top5_cadde_weekly_boxplot_colored.pdf")
-plt.savefig(out_path, dpi=300, bbox_inches="tight")
+#plt.savefig(out_path, dpi=300, bbox_inches="tight")
 plt.show()
 
 print(f"Saved figure to: {out_path.resolve()}")

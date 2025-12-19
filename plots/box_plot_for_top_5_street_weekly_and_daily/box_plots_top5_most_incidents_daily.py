@@ -28,7 +28,7 @@ df["GUN"] = df["TARIH"].dt.normalize()
 top5 = (
     df["CADDE"]
     .value_counts()
-    .head(5)
+    .head(15)
 )
 top5_streets = top5.index.tolist()
 
@@ -98,6 +98,6 @@ plt.xticks(rotation=0)
 
 fig_path = "top5_cadde_daily_boxplot_colored.pdf"
 plt.tight_layout()
-plt.savefig(fig_path, dpi=300)
+#plt.savefig(fig_path, dpi=300)
 plt.show()
 print(f"Saved figure: {fig_path}")

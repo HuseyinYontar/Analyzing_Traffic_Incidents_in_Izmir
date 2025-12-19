@@ -1,351 +1,242 @@
-import os
-import re
-import pandas as pd
-import numpy as np
+import json
+import math
+import unicodedata
 import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon as MplPolygon, Patch
 
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
+# -----------------------------
+# INPUT / OUTPUT
+# -----------------------------
+GEOJSON_PATH = "izmir_districts.geojson"
+OUT_PNG = "izmir_district_clusters.pdf"
 
-from matplotlib.backends.backend_pdf import PdfPages
+# -----------------------------
+# Your district -> cluster
+# -----------------------------
+cluster_rows = [
+    ("Bayraklı",   "C2"),
+    ("Bornova",    "C0"),
+    ("Buca",       "C3"),
+    ("Gaziemir",   "C2"),
+    ("Karabağlar", "C0"),
+    ("Karşıyaka",  "C0"),
+    ("Konak",      "C1"),
+    ("Çiğli",      "C3"),
+]
 
+# -----------------------------
+# City-center crop definition
+# -----------------------------
+CENTER_DISTRICTS = {
+    "Konak", "Karşıyaka", "Bornova", "Bayraklı",
+    "Buca", "Karabağlar", "Gaziemir", "Çiğli",
+}
 
-# =========================================================
-# 1) Load + utilities
-# =========================================================
-def load_excel(filepath: str) -> pd.DataFrame:
-    return pd.read_excel(filepath)
+# -----------------------------
+# Figure & legend layout (INCHES)
+# -----------------------------
+FIGSIZE_INCH = (7.2, 5.2)  # width, height (inches)  ✅ arranged
+LEGEND_LOC = "center left"  # ✅ legend outside-right
+LEGEND_BBOX = (1.02, 0.5)   # (x,y) in axes fraction
+LEGEND_FONTSIZE = 8
+LABEL_FONTSIZE = 6
 
-def pick_name_col(df: pd.DataFrame, preferred: str) -> str:
-    if preferred in df.columns:
-        return preferred
-    non_num = [c for c in df.columns if not pd.api.types.is_numeric_dtype(df[c])]
-    if non_num:
-        return non_num[0]
-    return df.columns[0]
+# -----------------------------
+# Utilities
+# -----------------------------
+def parse_cluster_id(cluster_str: str) -> int:
+    s = str(cluster_str).strip().lower()
+    if s.startswith("c"):
+        return int(s[1:])
+    return int(s)
 
-def translate_street_name(s: str) -> str:
-    """
-    caddesi -> street
-    bulvarı -> boulevard
-    tüneli  -> tunnel
-    """
-    if s is None or (isinstance(s, float) and np.isnan(s)):
-        return s
-    s = str(s)
+def make_cluster_color_map(k: int) -> dict[int, str]:
+    cmap_name = "tab10" if k <= 10 else "tab20"
+    cmap = plt.get_cmap(cmap_name)
+    return {cid: cmap(cid % cmap.N) for cid in range(k)}
 
-    replacements = [
-        (r"\bCaddesi\b", "Street"),
-        (r"\bcaddesi\b", "street"),
-        (r"\bBulvarı\b", "Boulevard"),
-        (r"\bbulvarı\b", "boulevard"),
-        (r"\bTüneli\b", "Tunnel"),
-        (r"\btüneli\b", "tunnel"),
-    ]
-    for pat, rep in replacements:
-        s = re.sub(pat, rep, s)
-    return s
+TR_MAP = str.maketrans({
+    "İ": "i", "I": "i", "ı": "i",
+    "Ğ": "g", "ğ": "g",
+    "Ü": "u", "ü": "u",
+    "Ş": "s", "ş": "s",
+    "Ö": "o", "ö": "o",
+    "Ç": "c", "ç": "c",
+})
 
-def add_english_name_column(df: pd.DataFrame, name_col: str) -> tuple[pd.DataFrame, str]:
-    df = df.copy()
-    en_col = f"{name_col}_EN"
-    df[en_col] = df[name_col].astype(str).apply(translate_street_name)
-    return df, en_col
+def norm_name(x: str) -> str:
+    x = str(x).strip().translate(TR_MAP)
+    x = unicodedata.normalize("NFKD", x)
+    x = "".join(ch for ch in x if not unicodedata.combining(ch))
+    return x.casefold()
 
-def build_numeric_matrix(df: pd.DataFrame, drop_cols: list[str]) -> pd.DataFrame:
-    X = df.drop(columns=[c for c in drop_cols if c in df.columns], errors="ignore").copy()
+cluster_ids = [parse_cluster_id(c) for _, c in cluster_rows]
+k = max(cluster_ids) + 1
+cid_to_color = make_cluster_color_map(k)
 
-    # ---- DROP RATIO COLUMNS (case-insensitive) ----
-    ratio_cols = [c for c in X.columns if "ratio" in str(c).lower()]
-    if ratio_cols:
-        X = X.drop(columns=ratio_cols)
+cluster_lookup = {norm_name(ilce): parse_cluster_id(cl) for ilce, cl in cluster_rows}
+CENTER_NORM = {norm_name(x) for x in CENTER_DISTRICTS}
 
-    # Coerce to numeric (comma-decimal safe)
-    for c in X.columns:
-        if X[c].dtype == object:
-            X[c] = X[c].astype(str).str.replace(",", ".", regex=False)
-        X[c] = pd.to_numeric(X[c], errors="coerce")
+# -----------------------------
+# Read GeoJSON
+# -----------------------------
+with open(GEOJSON_PATH, "r", encoding="utf-8") as f:
+    gj = json.load(f)
 
-    # Replace inf with NaN
-    X = X.replace([np.inf, -np.inf], np.nan)
+features = gj.get("features", [])
+if not features:
+    raise ValueError("No features found in the GeoJSON.")
 
-    # Drop columns that are entirely NaN
-    all_nan_cols = [c for c in X.columns if X[c].isna().all()]
-    if all_nan_cols:
-        X = X.drop(columns=all_nan_cols)
+def extract_name(props: dict):
+    if not isinstance(props, dict):
+        return None
+    for k in ["adi", "ILCE", "ilce", "name", "NAME", "district", "DISTRICT"]:
+        if k in props and props[k] is not None:
+            return props[k]
+    for v in props.values():
+        if isinstance(v, dict):
+            for k in ["adi", "ILCE", "ilce", "name", "NAME"]:
+                if k in v and v[k] is not None:
+                    return v[k]
+    return None
 
-    # Fill remaining NaNs safely
-    for c in X.columns:
-        if X[c].isna().any():
-            med = X[c].median()
-            if pd.isna(med):
-                med = 0.0
-            X[c] = X[c].fillna(med)
+# -----------------------------
+# Geometry helpers
+# -----------------------------
+def update_bounds(coords, bounds):
+    xmin, ymin, xmax, ymax = bounds
+    for x, y in coords:
+        xmin = min(xmin, x); ymin = min(ymin, y)
+        xmax = max(xmax, x); ymax = max(ymax, y)
+    return xmin, ymin, xmax, ymax
 
-    # Drop constant columns (zero variance)
-    const_cols = [c for c in X.columns if X[c].nunique(dropna=False) <= 1]
-    if const_cols:
-        X = X.drop(columns=const_cols)
+def centroid_of_ring(ring):
+    if len(ring) < 3:
+        xs = [p[0] for p in ring]; ys = [p[1] for p in ring]
+        return sum(xs)/len(xs), sum(ys)/len(ys)
 
-    # Final safety
-    if X.isna().any().any():
-        X = X.fillna(0.0)
+    x = [p[0] for p in ring]
+    y = [p[1] for p in ring]
+    if ring[0] != ring[-1]:
+        x.append(x[0]); y.append(y[0])
 
-    return X
+    area = 0.0
+    cx = 0.0
+    cy = 0.0
+    for i in range(len(x) - 1):
+        cross = x[i] * y[i+1] - x[i+1] * y[i]
+        area += cross
+        cx += (x[i] + x[i+1]) * cross
+        cy += (y[i] + y[i+1]) * cross
 
+    area *= 0.5
+    if abs(area) < 1e-12:
+        return sum(x[:-1])/len(x[:-1]), sum(y[:-1])/len(y[:-1])
 
-# =========================================================
-# 2) Plotting (PDF) — NO TITLES for PCA
-# =========================================================
-def save_pca_clusters_pdf(pca_df: pd.DataFrame, label_col: str, outfile_pdf: str):
-    """
-    PCA scatter plot with clearly distinguishable colors per cluster.
-    No title, axis labels kept.
-    """
-    # Distinct colors for clusters
-    cluster_colors = [
-        "#1f77b4",  # blue
-        "#ff7f0e",  # orange
-        "#2ca02c",  # green
-        "#d62728",  # red
-        "#9467bd",  # purple
-        "#8c564b",  # brown
-        "#e377c2",  # pink
-        "#7f7f7f",  # gray
-        "#bcbd22",  # yellow-green
-        "#17becf",  # cyan
-    ]
+    cx /= (6.0 * area)
+    cy /= (6.0 * area)
+    return cx, cy
 
-    plt.figure(figsize=(10, 6))
+# -----------------------------
+# Plot (cropped to city center)
+# -----------------------------
+fig, ax = plt.subplots(figsize=FIGSIZE_INCH)
 
-    unique_clusters = sorted(pca_df["cluster"].unique())
-    for idx, cl in enumerate(unique_clusters):
-        mask = pca_df["cluster"] == cl
-        color = cluster_colors[idx % len(cluster_colors)]
+center_bounds = (math.inf, math.inf, -math.inf, -math.inf)
+used_cluster_ids = set()
 
-        # Scatter points for this cluster
-        plt.scatter(
-            pca_df.loc[mask, "PC1"],
-            pca_df.loc[mask, "PC2"],
-            s=30,
-            color=color,
-            label=f"C{cl}",
-            alpha=0.9,
-        )
+def draw_outer_ring(outer_ring, facecolor):
+    ax.add_patch(MplPolygon(
+        outer_ring, closed=True,
+        facecolor=facecolor, edgecolor="black", linewidth=0.7
+    ))
 
-        # Annotations (street/district names)
-        for _, r in pca_df[mask].iterrows():
-            plt.annotate(
-                str(r[label_col]),
-                (r["PC1"], r["PC2"]),
-                fontsize=8,
-                xytext=(4, 2),
-                textcoords="offset points",
-            )
+for feat in features:
+    props = feat.get("properties", {})
+    name = extract_name(props)
+    name_norm = norm_name(name) if name else None
+    is_center = (name_norm in CENTER_NORM)
 
-    plt.xlabel("PC1")
-    plt.ylabel("PC2")
-    plt.legend(title="Clusters", fontsize=8, title_fontsize=9, loc="best")
-    plt.tight_layout()
-    plt.savefig(outfile_pdf, format="pdf")
-    plt.close()
-
-
-
-def save_centroid_barcharts_multipage_pdf(centroids_df: pd.DataFrame, outfile_pdf: str):
-    """
-    All clusters' centroid bar charts in a SINGLE figure.
-
-    Layout:
-      - If <= 4 clusters  -> 2 rows x 2 columns
-      - If 5–6 clusters   -> 2 rows x 3 columns
-      - If more           -> automatic grid with up to 3 columns
-
-    Each subplot is titled C0, C1, ... according to the cluster index.
-    'total_accidents' column is excluded from the plots.
-    No axis titles are shown. Some feature names are prettified.
-    """
-    # Exclude cluster label and total incidents column from features
-    feature_cols = [
-        c for c in centroids_df.columns
-        if c not in ["cluster", "total_accidents"]
-    ]
-
-    n_clusters = len(centroids_df)
-    if n_clusters == 0 or len(feature_cols) == 0:
-        return
-
-    # Pretty display names for selected columns
-    pretty_names = {
-        "average_intervention_time": "Average Intervention Time",
-        "average_incidents": "Monthly Average Incidents",
-        "total_number_of_severe": "Number of Life-threatening Accidents",
-        "total_number_of_non_severe": "Number of Non-life-threatening Accidents",
-    }
-    feature_labels = [pretty_names.get(c, c) for c in feature_cols]
-
-    # ---- Decide grid shape ----
-    if n_clusters <= 4:
-        nrows, ncols = 2, 2      # 2x2 for up to 4 clusters
-    elif n_clusters <= 6:
-        nrows, ncols = 2, 3      # 2x3 for 5–6 clusters
+    cid = cluster_lookup.get(name_norm, None)
+    if cid is None:
+        facecolor = "#dddddd"
     else:
-        # Fallback: keep at most 3 columns, compute rows
-        ncols = 3
-        nrows = int(np.ceil(n_clusters / ncols))
+        facecolor = cid_to_color[cid]
+        used_cluster_ids.add(cid)
 
-    # Color palette, one color per cluster (reused cyclically if needed)
-    cluster_colors = [
-        "#4c72b0",  # blue
-        "#55a868",  # green
-        "#c44e52",  # red
-        "#8172b2",  # purple
-        "#ccb974",  # brownish
-        "#64b5cd",  # teal
-    ]
+    geom = feat.get("geometry", {})
+    gtype = geom.get("type")
+    coords = geom.get("coordinates")
+    if not gtype or coords is None:
+        continue
 
-    fig, axes = plt.subplots(
-        nrows=nrows,
-        ncols=ncols,
-        figsize=(4 * ncols + 2, 3 * nrows + 2),
-        squeeze=False
-    )
-    axes_flat = axes.flatten()
+    label_xy = None
 
-    x_pos = np.arange(len(feature_cols))
+    if gtype == "Polygon":
+        outer = coords[0]
+        draw_outer_ring(outer, facecolor)
+        if is_center:
+            center_bounds = update_bounds(outer, center_bounds)
+        label_xy = centroid_of_ring(outer)
 
-    for i, (_, row) in enumerate(centroids_df.iterrows()):
-        ax = axes_flat[i]
-        values = [row[c] for c in feature_cols]
-        color = cluster_colors[i % len(cluster_colors)]
+    elif gtype == "MultiPolygon":
+        for poly in coords:
+            outer = poly[0]
+            draw_outer_ring(outer, facecolor)
+            if is_center:
+                center_bounds = update_bounds(outer, center_bounds)
+            if label_xy is None:
+                label_xy = centroid_of_ring(outer)
 
-        ax.bar(x_pos, values, color=color)
-        ax.set_xticks(x_pos)
-        ax.set_xticklabels(feature_labels, rotation=45, ha="right", fontsize=8)
+    # label ONLY clustered districts (and only inside center set)
+    if is_center and (cid is not None) and name and (label_xy is not None):
+        ax.text(label_xy[0], label_xy[1], str(name),
+                fontsize=4, ha="center", va="center")
 
-        # NO axis titles:
-        # ax.set_xlabel(...)
-        # ax.set_ylabel(...)
+# apply crop
+xmin, ymin, xmax, ymax = center_bounds
+if not all(map(math.isfinite, [xmin, ymin, xmax, ymax])):
+    raise ValueError("CENTER_DISTRICTS did not match any GeoJSON district names.")
 
-        # Title as C0, C1, C2, ...
-        ax.set_title(f"C{int(row['cluster'])}", fontsize=11, pad=8)
+pad_x = (xmax - xmin) * 0.08
+pad_y = (ymax - ymin) * 0.08
+ax.set_xlim(xmin - pad_x, xmax + pad_x)
+ax.set_ylim(ymin - pad_y, ymax + pad_y)
+ax.set_aspect("equal", adjustable="box")
+ax.set_axis_off()
+# Legend (INSIDE top-left like the example)
+# If you want to show ALL clusters (c0..c{k-1}) even if not used, use range(k)
+legend_cluster_ids = list(range(k))  # <-- shows c0..c{k-1} like the sample figure
+# legend_cluster_ids = sorted(used_cluster_ids)  # <-- alternative: only used clusters
 
-    # Hide unused subplots (if grid has more cells than clusters)
-    for j in range(i + 1, len(axes_flat)):
-        axes_flat[j].axis("off")
+handles = [Patch(facecolor=cid_to_color[c], edgecolor="black", label=f"c{c}")
+           for c in reversed(legend_cluster_ids)]  # reversed -> c{k-1} on top
+# optional: add gray class
+# handles.append(Patch(facecolor="#dddddd", edgecolor="black", label="Not in clustering data set"))
 
-    fig.tight_layout()
-    fig.subplots_adjust(bottom=0.25)  # extra space for rotated x labels
-    fig.savefig(outfile_pdf, format="pdf")
-    plt.close(fig)
+ax.legend(
+    handles=handles,
+    loc="upper left",
+    bbox_to_anchor=(0.02, 0.98),   # inside axes, slight inset
+    borderaxespad=0.0,
+    frameon=False,                # like the example (no legend box)
+    fontsize=8,
+    title=None
+)
 
+plt.tight_layout()  # no rect needed since legend is inside
 
-# =========================================================
-# 3) KMeans pipeline
-# =========================================================
-def kmeans_full_pipeline(
-    df: pd.DataFrame,
-    dataset_name: str,
-    preferred_name_col: str,
-    k: int,
-    out_root: str = "kmeans_outputs",
-    random_state: int = 42
-):
-    name_col = pick_name_col(df, preferred_name_col)
-    df2, name_col_en = add_english_name_column(df, name_col)
+fig.patch.set_facecolor("white")     # background
+ax.set_position([0, 0, 0, 0])        # axes fills the whole figure
+fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
 
-    # Drop BOTH name columns from features
-    X = build_numeric_matrix(df2, drop_cols=[name_col, name_col_en])
-
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-
-    km = KMeans(n_clusters=k, random_state=random_state, n_init=10)
-    labels = km.fit_predict(X_scaled)
-
-    sizes = pd.Series(labels, name="cluster").value_counts().sort_index().reset_index()
-    sizes.columns = ["cluster", "size"]
-
-    centroids_orig = scaler.inverse_transform(km.cluster_centers_)
-    centroids = pd.DataFrame(centroids_orig, columns=X.columns)
-    centroids.insert(0, "cluster", range(k))
-
-    centroids_scaled = pd.DataFrame(km.cluster_centers_, columns=X.columns)
-    centroids_scaled.insert(0, "cluster", range(k))
-
-    assignments = df2[[name_col, name_col_en]].copy()
-    assignments["cluster"] = labels
-    assignments = assignments.sort_values(["cluster", name_col_en]).reset_index(drop=True)
-
-    pca = PCA(n_components=2, random_state=random_state)
-    X_pca = pca.fit_transform(X_scaled)
-    pca_df = pd.DataFrame(X_pca, columns=["PC1", "PC2"])
-    pca_df[name_col_en] = df2[name_col_en].astype(str).values
-    pca_df["cluster"] = labels
-
-    out_dir = os.path.join(out_root, dataset_name)
-    os.makedirs(out_dir, exist_ok=True)
-
-    pca_pdf_path = os.path.join(out_dir, f"{dataset_name}_pca_clusters_k{k}.pdf")
-    save_pca_clusters_pdf(pca_df, label_col=name_col_en, outfile_pdf=pca_pdf_path)
-
-    centroids_orig_pdf = os.path.join(out_dir, f"{dataset_name}_centroids_original_k{k}.pdf")
-    centroids_scaled_pdf = os.path.join(out_dir, f"{dataset_name}_centroids_standardized_k{k}.pdf")
-    save_centroid_barcharts_multipage_pdf(centroids, centroids_orig_pdf)
-    save_centroid_barcharts_multipage_pdf(centroids_scaled, centroids_scaled_pdf)
-
-    assignments_path = os.path.join(out_dir, f"{dataset_name}_assignments_k{k}.xlsx")
-    centroids_path = os.path.join(out_dir, f"{dataset_name}_centroids_original_k{k}.xlsx")
-    sizes_path = os.path.join(out_dir, f"{dataset_name}_cluster_sizes_k{k}.xlsx")
-
-    assignments.to_excel(assignments_path, index=False)
-    centroids.to_excel(centroids_path, index=False)
-    sizes.to_excel(sizes_path, index=False)
-
-    print(f"\n==================== {dataset_name.upper()} (k={k}) ====================")
-    print(f"Name col: {name_col} | English col: {name_col_en}")
-    print("\nCluster sizes:")
-    print(sizes.to_string(index=False))
-    print("\nCentroids (original scale):")
-    print(centroids.to_string(index=False))
-    print(f"\nSaved PDFs: {pca_pdf_path}, {centroids_orig_pdf}, {centroids_scaled_pdf}")
-    print(f"Saved tables: {assignments_path}, {centroids_path}, {sizes_path}")
-
-    return {
-        "sizes": sizes,
-        "centroids_original": centroids,
-        "centroids_standardized": centroids_scaled,
-        "assignments": assignments,
-    }
-
-
-# =========================================================
-# 4) Main
-# =========================================================
-def main():
-    streets_file = "streets_dataset.xlsx"
-    districts_file = "districts_dataset.xlsx"
-
-    streets_df = load_excel(streets_file)
-    districts_df = load_excel(districts_file)
-
-    kmeans_full_pipeline(
-        df=districts_df,
-        dataset_name="districts",
-        preferred_name_col="ILCE",
-        k=4
-    )
-
-    kmeans_full_pipeline(
-        df=streets_df,
-        dataset_name="streets",
-        preferred_name_col="STREET",
-        k=6
-    )
-
-    print("\nAll outputs saved under: kmeans_outputs/")
-
-
-if __name__ == "__main__":
-    main()
+plt.savefig(
+    OUT_PNG,
+    dpi=300,
+    bbox_inches="tight",
+    pad_inches=0,                   # <-- key to remove white stripes
+    facecolor=fig.get_facecolor(),
+    edgecolor="none"
+)
+plt.show()
+print(f"Saved: {OUT_PNG}")
