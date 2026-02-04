@@ -8,9 +8,9 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
 
-# =========================================================
+
 # 1) Load + utilities
-# =========================================================
+
 def load_excel(filepath: str) -> pd.DataFrame:
     return pd.read_excel(filepath)
 
@@ -92,9 +92,9 @@ def build_numeric_matrix(df: pd.DataFrame, drop_cols: list[str]) -> pd.DataFrame
     return X
 
 
-# =========================================================
+
 # 2) Plotting (PDF) — PCA
-# =========================================================
+
 def save_pca_clusters_pdf(pca_df: pd.DataFrame, label_col: str, outfile_pdf: str):
     """
     PCA scatter plot with clearly distinguishable colors per cluster.
@@ -209,9 +209,9 @@ def save_centroid_barcharts_multipage_pdf(centroids_df: pd.DataFrame, outfile_pd
     plt.close(fig)
 
 
-# =========================================================
+
 # 3) K-Medians (L1) implementation (no extra dependencies)
-# =========================================================
+
 def _kmedians_single_run(
     X: np.ndarray,
     k: int,
@@ -286,9 +286,9 @@ def fit_kmedians(
     return best_labels, best_centers
 
 
-# =========================================================
-# 4) K-Medians pipeline (replaces KMeans)
-# =========================================================
+
+# K-Medians pipeline
+
 def kmedians_full_pipeline(
     df: pd.DataFrame,
     dataset_name: str,
@@ -374,9 +374,7 @@ def kmedians_full_pipeline(
     }
 
 
-# =========================================================
-# 5) Main
-# =========================================================
+
 def main():
     streets_file = "streets_dataset.xlsx"
     districts_file = "districts_dataset.xlsx"

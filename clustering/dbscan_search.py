@@ -1,3 +1,6 @@
+"""This script is for finding best parameters for DBSCAN"""
+
+
 import os
 import re
 import numpy as np
@@ -12,9 +15,9 @@ from sklearn.decomposition import PCA
 from matplotlib.backends.backend_pdf import PdfPages
 
 
-# =========================================================
+
 # 1) Load + feature matrix
-# =========================================================
+
 def load_excel_with_decimal_fix(filepath: str) -> pd.DataFrame:
     df = pd.read_excel(filepath)
 
@@ -69,9 +72,9 @@ def translate_road_terms(s: str) -> str:
     return s
 
 
-# =========================================================
-# 2) DBSCAN grid search
-# =========================================================
+
+# DBSCAN grid search
+
 def dbscan_grid_search(X, eps_values, min_samples_values):
     rows = []
 
@@ -117,9 +120,9 @@ def pick_best_params(results: pd.DataFrame):
     return float(r["eps"]), int(r["min_samples"])
 
 
-# =========================================================
-# 3) Plotting helpers (NO TITLES)
-# =========================================================
+
+# Plotting helpers
+
 def _slugify(s: str) -> str:
     s = s.strip().lower()
     s = re.sub(r"[^a-z0-9]+", "_", s)
@@ -229,9 +232,9 @@ def save_dbscan_pca_pdf(X_scaled: np.ndarray, labels: np.ndarray, point_names, o
     plt.close()
 
 
-# =========================================================
-# 4) Runner
-# =========================================================
+
+# Runner
+
 def run_for_dataset(filepath, dataset_name, eps_values, min_samples_values, out_dir):
     df = load_excel_with_decimal_fix(filepath)
     X_scaled, numeric_cols = build_feature_matrix(df)

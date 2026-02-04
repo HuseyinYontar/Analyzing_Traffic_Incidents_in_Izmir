@@ -25,6 +25,7 @@ def pick_label_column(df: pd.DataFrame):
     return non_numeric[0] if non_numeric else None
 
 
+# English -> Turkish for road terms
 def translate_road_terms(s: str) -> str:
     if s is None:
         return s
@@ -61,6 +62,7 @@ def get_names(df: pd.DataFrame, label_col: str | None, translate=False):
     return [f"row_{i}" for i in range(len(df))]
 
 
+# Plot output
 def plot_dbscan_pca(X, labels, names, title):
     X2 = PCA(n_components=2, random_state=42).fit_transform(X)
 
@@ -77,6 +79,7 @@ def plot_dbscan_pca(X, labels, names, title):
     plt.show()
 
 
+# Print which label belongs to which cluster -1 if noise
 def print_memberships(labels, names):
     cluster_map = {}
     for name, c in zip(names, labels):
@@ -119,7 +122,7 @@ if __name__ == "__main__":
     districts_xlsx = os.path.join(base_dir, "districts_dataset.xlsx")
     streets_xlsx = os.path.join(base_dir, "streets_dataset.xlsx")
 
-    # BEST PARAMS YOU FOUND
+    # Run DBSCAN with best parameters
     run_dbscan_and_plot(
         xlsx_path=districts_xlsx,
         dataset_name="Districts",

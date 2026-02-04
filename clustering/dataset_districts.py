@@ -1,10 +1,10 @@
 import numpy as np
 import pandas as pd
 
-# -----------------------------
-# CONFIG
-# -----------------------------
-INPUT_XLSX  = "..\\..\\izbb-kaza-ariza-verileri-SON-binned-frequent-accident_types.xlsx"
+
+# Config
+
+INPUT_XLSX  = "..\\izbb-kaza-ariza-verileri-SON-binned-frequent-accident_types.xlsx"
 OUTPUT_XLSX = r"districts_dataset.xlsx"
 
 OUTLIER_MAX = 64  # exclude intervention times > 64 (outliers)

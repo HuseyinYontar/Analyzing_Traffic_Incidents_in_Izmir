@@ -4,7 +4,7 @@ import re
 # -----------------------------
 # CONFIG
 # -----------------------------
-INPUT_XLSX  = "..\\..\\izbb-kaza-ariza-verileri-SON-binned-frequent-accident_types.xlsx"
+INPUT_XLSX  = "..\\izbb-kaza-ariza-verileri-SON-binned-frequent-accident_types.xlsx"
 OUTPUT_XLSX = r"streets_dataset.xlsx"
 
 OUTLIER_MAX = 64
@@ -27,14 +27,12 @@ TOP_STREETS = [
     "İnönü Caddesi",
 ]
 
-# -----------------------------
-# LOAD
-# -----------------------------
+# Load Data
 df = pd.read_excel(INPUT_XLSX)
 
-# -----------------------------
-# Pick the street/location column automatically (edit if needed)
-# -----------------------------
+
+# Pick the street column automatically (edit if needed)
+
 street_col_candidates = ["CADDE"]
 street_col = next((c for c in street_col_candidates if c in df.columns), None)
 if street_col is None:
@@ -43,33 +41,32 @@ if street_col is None:
         f"Tried: {street_col_candidates}. Available columns: {df.columns.tolist()}"
     )
 
-# -----------------------------
+
 # Date -> month key
-# -----------------------------
+
 df["TARIH"] = pd.to_datetime(df["TARIH"], errors="coerce")
 df = df[df["TARIH"].notna()].copy()
 df["YEAR_MONTH"] = df["TARIH"].dt.to_period("M").astype(str)
 
-# -----------------------------
-# Intervention time numeric + outlier-clean version (for averaging only)
-# -----------------------------
+
+# Clean outliers for Intervention time
+
 df["MUDAHALE_SURESI_DK"] = pd.to_numeric(df["MUDAHALE_SURESI_DK"], errors="coerce")
 df["MUDAHALE_SURESI_DK_CLEAN"] = df["MUDAHALE_SURESI_DK"].where(
     df["MUDAHALE_SURESI_DK"].between(0, OUTLIER_MAX, inclusive="both"),
     np.nan
 )
 
-# -----------------------------
+
 # Accident types
-# -----------------------------
+
 kazatipi = df["KAZA_TIPI"].astype(str).str.strip()
 df["_is_severe"] = kazatipi.eq("Yaralanmalı/Ölümlü")
 df["_is_nonsevere"] = kazatipi.eq("Maddi Hasarlı")
 
-# -----------------------------
+
 # Assign each row to one of the TOP_STREETS based on substring match
-# (works even if street appears inside longer address text)
-# -----------------------------
+
 loc = (
     df[street_col]
     .astype(str)
@@ -85,9 +82,9 @@ pattern = "(" + "|".join(re.escape(s) for s in streets_sorted) + ")"
 df["STREET"] = loc.str.extract(pattern, expand=False)
 df = df[df["STREET"].notna()].copy()  # keep only the top-15 streets
 
-# -----------------------------
+
 # MONTH-LEVEL FEATURES (per street, per month)
-# -----------------------------
+
 monthly = (
     df.groupby(["STREET", "YEAR_MONTH"], as_index=False)
       .agg(
@@ -98,9 +95,8 @@ monthly = (
       )
 )
 
-# -----------------------------
 # STREET-LEVEL DATASET
-# -----------------------------
+
 out = (
     monthly.groupby("STREET", as_index=False)
            .agg(
@@ -118,7 +114,7 @@ out["ratio"] = np.where(den > 0, out["total_number_of_severe"] / den, np.nan)
 out["total_accidents"] = den
 out = out.sort_values("total_accidents", ascending=False)
 
-# Keep final columns (drop helper if you want)
+# Final columns
 out = out[
     [
         "STREET",
@@ -131,9 +127,9 @@ out = out[
     ]
 ]
 
-# -----------------------------
+
 # SAVE
-# -----------------------------
+
 out.to_excel(OUTPUT_XLSX, index=False)
 print("Street column used:", street_col)
 print("Saved:", OUTPUT_XLSX)

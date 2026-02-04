@@ -4,15 +4,15 @@ import unicodedata
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon as MplPolygon, Patch
 
-# -----------------------------
+
 # INPUT / OUTPUT
-# -----------------------------
+
 GEOJSON_PATH = "izmir_districts.geojson"
 OUT_PNG = "izmir_district_clusters.pdf"
 
-# -----------------------------
-# Your district -> cluster
-# -----------------------------
+
+# Cluster mapping
+
 cluster_rows = [
     ("Bayraklı",   "C2"),
     ("Bornova",    "C0"),
@@ -24,26 +24,26 @@ cluster_rows = [
     ("Çiğli",      "C3"),
 ]
 
-# -----------------------------
+
 # City-center crop definition
-# -----------------------------
+
 CENTER_DISTRICTS = {
     "Konak", "Karşıyaka", "Bornova", "Bayraklı",
     "Buca", "Karabağlar", "Gaziemir", "Çiğli",
 }
 
-# -----------------------------
+
 # Figure & legend layout (INCHES)
-# -----------------------------
-FIGSIZE_INCH = (7.2, 5.2)  # width, height (inches)  ✅ arranged
-LEGEND_LOC = "center left"  # ✅ legend outside-right
+
+FIGSIZE_INCH = (7.2, 5.2)  # width, height (inches)   arranged
+LEGEND_LOC = "center left"  #  legend outside-right
 LEGEND_BBOX = (1.02, 0.5)   # (x,y) in axes fraction
 LEGEND_FONTSIZE = 8
 LABEL_FONTSIZE = 6
 
-# -----------------------------
+
 # Utilities
-# -----------------------------
+
 def parse_cluster_id(cluster_str: str) -> int:
     s = str(cluster_str).strip().lower()
     if s.startswith("c"):
@@ -77,9 +77,9 @@ cid_to_color = make_cluster_color_map(k)
 cluster_lookup = {norm_name(ilce): parse_cluster_id(cl) for ilce, cl in cluster_rows}
 CENTER_NORM = {norm_name(x) for x in CENTER_DISTRICTS}
 
-# -----------------------------
+
 # Read GeoJSON
-# -----------------------------
+
 with open(GEOJSON_PATH, "r", encoding="utf-8") as f:
     gj = json.load(f)
 
@@ -100,9 +100,9 @@ def extract_name(props: dict):
                     return v[k]
     return None
 
-# -----------------------------
+
 # Geometry helpers
-# -----------------------------
+
 def update_bounds(coords, bounds):
     xmin, ymin, xmax, ymax = bounds
     for x, y in coords:
@@ -137,9 +137,9 @@ def centroid_of_ring(ring):
     cy /= (6.0 * area)
     return cx, cy
 
-# -----------------------------
+
 # Plot (cropped to city center)
-# -----------------------------
+
 fig, ax = plt.subplots(figsize=FIGSIZE_INCH)
 
 center_bounds = (math.inf, math.inf, -math.inf, -math.inf)
@@ -204,15 +204,13 @@ ax.set_xlim(xmin - pad_x, xmax + pad_x)
 ax.set_ylim(ymin - pad_y, ymax + pad_y)
 ax.set_aspect("equal", adjustable="box")
 ax.set_axis_off()
-# Legend (INSIDE top-left like the example)
-# If you want to show ALL clusters (c0..c{k-1}) even if not used, use range(k)
+
 legend_cluster_ids = list(range(k))  # <-- shows c0..c{k-1} like the sample figure
 # legend_cluster_ids = sorted(used_cluster_ids)  # <-- alternative: only used clusters
 
 handles = [Patch(facecolor=cid_to_color[c], edgecolor="black", label=f"c{c}")
            for c in reversed(legend_cluster_ids)]  # reversed -> c{k-1} on top
-# optional: add gray class
-# handles.append(Patch(facecolor="#dddddd", edgecolor="black", label="Not in clustering data set"))
+
 
 ax.legend(
     handles=handles,
@@ -224,7 +222,7 @@ ax.legend(
     title=None
 )
 
-plt.tight_layout()  # no rect needed since legend is inside
+plt.tight_layout()
 
 fig.patch.set_facecolor("white")     # background
 ax.set_position([0, 0, 0, 0])        # axes fills the whole figure
@@ -234,7 +232,7 @@ plt.savefig(
     OUT_PNG,
     dpi=300,
     bbox_inches="tight",
-    pad_inches=0,                   # <-- key to remove white stripes
+    pad_inches=0,
     facecolor=fig.get_facecolor(),
     edgecolor="none"
 )

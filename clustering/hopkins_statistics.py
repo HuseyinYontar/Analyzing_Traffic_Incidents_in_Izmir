@@ -1,3 +1,8 @@
+"""
+This script evaluates whether the dataset is clusterable (Hopkins statistic)
+and helps select an appropriate number of clusters (k) using
+Silhouette, Calinski–Harabasz, Davies–Bouldin, and Elbow (inertia) metrics.
+"""
 import os
 import re
 import numpy as np
@@ -10,9 +15,9 @@ from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_har
 from sklearn.neighbors import NearestNeighbors
 
 
-# =========================================================
-# (NEW) PDF helpers (no logic change, only saving)
-# =========================================================
+
+# PDF helpers (no logic change, only saving)
+
 def safe_name(s: str) -> str:
     # "Districts (8)" -> "Districts_8"
     s = re.sub(r"[^\w\-]+", "_", s, flags=re.UNICODE)
@@ -22,9 +27,9 @@ def save_pdf(fig, out_path: str):
     fig.savefig(out_path, format="pdf", bbox_inches="tight")
 
 
-# =========================================================
-# 1) Load data (handles comma decimals)
-# =========================================================
+
+# Load data (handles comma decimals)
+
 def load_excel_with_decimal_fix(filepath: str) -> pd.DataFrame:
     df = pd.read_excel(filepath)
 
@@ -36,9 +41,9 @@ def load_excel_with_decimal_fix(filepath: str) -> pd.DataFrame:
     return df
 
 
-# =========================================================
-# 2) Feature matrix (numeric only)
-# =========================================================
+
+# Feature matrix (numeric only)
+
 def build_feature_matrix(df: pd.DataFrame):
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     X = df[numeric_cols].copy()
@@ -49,9 +54,9 @@ def build_feature_matrix(df: pd.DataFrame):
     return X_scaled, numeric_cols
 
 
-# =========================================================
-# 3) Hopkins statistic
-# =========================================================
+
+# Hopkins statistic
+
 def hopkins_statistic(X, m=None, random_state=42):
     rng = np.random.default_rng(random_state)
 
@@ -107,9 +112,9 @@ def plot_hopkins_distribution(h_vals, title, point_estimate=None):
     plt.show()
 
 
-# =========================================================
-# 4) k-selection metrics
-# =========================================================
+
+#  k-selection metrics
+
 def evaluate_k_range(X, k_min=2, k_max=10, random_state=42):
     n = X.shape[0]
     k_max = min(k_max, n - 1)  # cannot have k >= n
@@ -182,9 +187,9 @@ def plot_k_metrics(k_df, dataset_name, silhouette_save_path=None, elbow_save_pat
     plt.show()
 
 
-# =========================================================
-# 5) Runner for one dataset
-# =========================================================
+
+# Runner for one dataset
+
 def run_all_for_dataset(dataset_name, filepath, k_min, k_max, hopkins_runs=200, seed=42):
     print("\n" + "=" * 80)
     print(f"DATASET: {dataset_name}")
@@ -198,7 +203,7 @@ def run_all_for_dataset(dataset_name, filepath, k_min, k_max, hopkins_runs=200, 
     print("Used numeric features:", used_features)
     print("X shape:", X.shape)
 
-    # Hopkins (still computed + shown; not saved)
+    # Hopkins
     m = max(1, int(0.5 * len(X)))
 
     H = hopkins_statistic(X, m=m, random_state=seed)
@@ -219,7 +224,7 @@ def run_all_for_dataset(dataset_name, filepath, k_min, k_max, hopkins_runs=200, 
     print("\nK evaluation table:")
     print(k_df)
 
-    # (NEW) save Silhouette + Elbow plots as PDF in the same folder as script
+    # save Silhouette + Elbow plots as PDF in the same folder as script
     base_dir = os.path.dirname(os.path.abspath(__file__))
     tag = safe_name(dataset_name)
 
@@ -234,9 +239,9 @@ def run_all_for_dataset(dataset_name, filepath, k_min, k_max, hopkins_runs=200, 
     )
 
 
-# =========================================================
+
 # MAIN (both datasets)
-# =========================================================
+
 if __name__ == "__main__":
     # Files are in the SAME folder as this script
     base_dir = os.path.dirname(os.path.abspath(__file__))

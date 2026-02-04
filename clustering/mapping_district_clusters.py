@@ -1,5 +1,5 @@
-# pip install matplotlib
-# (No geopandas needed.)
+"""This script visualizes district-level clustering results on an İzmir map"""
+
 
 import json
 import math
@@ -140,7 +140,7 @@ for feat in features:
             if label_xy is None:
                 label_xy = centroid_of_ring(outer)
 
-    # ✅ Label ONLY clustered districts
+    # Label ONLY clustered districts
     if (mapped is not None) and name and (label_xy is not None):
         ax.text(label_xy[0], label_xy[1], str(name).title(),
                 fontsize=8, ha="center", va="center")
