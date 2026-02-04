@@ -19,9 +19,9 @@ from sklearn.metrics import (
     precision_recall_fscore_support,
 )
 
-# =========================================================
-# 1) Load train / test data
-# =========================================================
+
+# Load train and test data
+
 train_path = "..\\train_dataset_balanced.xlsx"
 test_path  = "..\\test_dataset_balanced.xlsx"
 
@@ -30,15 +30,15 @@ test_df  = pd.read_excel(test_path)
 
 TARGET = "KAZA_TIPI_Yaralanmalı/Ölümlü"
 
-X_train = train_df.drop(columns=[TARGET])
+X_train = train_df.drop(columns=[TARGET, "KAZA_TIPI"])
 y_train = train_df[TARGET].astype(int)
 
 X_test  = test_df.drop(columns=[TARGET])
 y_test  = test_df[TARGET].astype(int)
 
-# =========================================================
-# 2) Preprocessing (all predictors are categorical)
-# =========================================================
+
+# Preprocessing (all predictors are categorical)
+
 cat_cols = X_train.columns.tolist()
 
 # OneHotEncoder compatibility for sklearn versions
@@ -58,11 +58,11 @@ preprocess = ColumnTransformer(
     verbose_feature_names_out=False
 )
 
-# =========================================================
-# 3) Define models (base, before GridSearch)
-# =========================================================
 
-# 3.1 Random Forest (we’ll tune it)
+#  Define models (base, before GridSearch)
+
+
+# Random Forest
 rf_clf = RandomForestClassifier(
     random_state=42,
     n_jobs=-1,
@@ -74,13 +74,13 @@ rf_pipeline = Pipeline(steps=[
     ("clf", rf_clf)
 ])
 
-# 3.2 AdaBoost with Decision Tree base learner (we’ll tune n_estimators & learning_rate)
+# AdaBoost with Decision Tree base learner
 base_tree = DecisionTreeClassifier(
     max_depth=1,        # decision stump
     random_state=42
 )
 
-# compatibility: estimator (new) vs base_estimator (old)
+
 try:
     ada_clf = AdaBoostClassifier(
         estimator=base_tree,
@@ -97,11 +97,11 @@ ada_pipeline = Pipeline(steps=[
     ("clf", ada_clf)
 ])
 
-# =========================================================
-# 4) Define parameter grids for GridSearchCV
-# =========================================================
 
-# RF params (you can shrink if it’s slow)
+# Define parameter grids for GridSearchCV
+
+
+# RF params
 rf_param_grid = {
     "clf__n_estimators":      [200, 400, 600],
     "clf__max_depth":         [None, 10, 20],
@@ -110,7 +110,7 @@ rf_param_grid = {
     "clf__max_features":      ["sqrt", "log2"],
 }
 
-# AdaBoost params – safe for all sklearn versions (no estimator/base_estimator in grid)
+# AdaBoost params
 ada_param_grid = {
     "clf__n_estimators":  [50, 100, 200, 400],
     "clf__learning_rate": [0.01, 0.1, 0.5, 1.0],
@@ -118,9 +118,9 @@ ada_param_grid = {
 
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-# =========================================================
-# 5) GridSearchCV for Random Forest
-# =========================================================
+
+# GridSearchCV for Random Forest
+
 rf_grid = GridSearchCV(
     estimator=rf_pipeline,
     param_grid=rf_param_grid,
@@ -144,9 +144,9 @@ for k, v in best_rf_params.items():
 
 best_rf = rf_grid.best_estimator_
 
-# =========================================================
-# 6) GridSearchCV for AdaBoost
-# =========================================================
+
+# GridSearchCV for AdaBoost
+
 ada_grid = GridSearchCV(
     estimator=ada_pipeline,
     param_grid=ada_param_grid,
@@ -170,9 +170,9 @@ for k, v in best_ada_params.items():
 
 best_ada = ada_grid.best_estimator_
 
-# =========================================================
-# 7) Evaluation helper – MATCHES YOUR TABLE
-# =========================================================
+
+# Evaluation helper
+
 def evaluate_model(name, model, X_test, y_test):
     print(f"\n==================== {name} (BEST FROM GRID) ====================")
     y_pred  = model.predict(X_test)
@@ -203,7 +203,7 @@ def evaluate_model(name, model, X_test, y_test):
     # ROC-AUC
     auc = roc_auc_score(y_test, y_proba)
 
-    # ---- Print nicely ----
+
     print(f"Test Accuracy                       : {acc:.4f}")
     print(f"Precision - Life-threatening (1)    : {prec_life:.2f}")
     print(f"Precision - Non-life-threatening (0): {prec_non:.2f}")
@@ -214,7 +214,7 @@ def evaluate_model(name, model, X_test, y_test):
     print(f"ROC-AUC                             : {auc:.4f}")
     print(f"Confusion Matrix: TN={TN}, FP={FP}, FN={FN}, TP={TP}")
 
-    # Optional: full classification report (if you still want it)
+
     print("\nClassification Report:")
     print(classification_report(
         y_test,
@@ -222,7 +222,7 @@ def evaluate_model(name, model, X_test, y_test):
         target_names=["Non-life-threatening (0)", "Life-threatening (1)"]
     ))
 
-    # ---- LaTeX row for your table ----
+
     latex_row = (
         f"{name} & "
         f"{acc:.4f} & "
@@ -248,23 +248,23 @@ def evaluate_model(name, model, X_test, y_test):
         "TN": TN, "FP": FP, "FN": FN, "TP": TP
     }
 
-# =========================================================
-# 8) Evaluate both tuned models on the TEST set
-# =========================================================
+
+# Evaluate both tuned models on the TEST set
+
 rf_results  = evaluate_model("Random Forest", best_rf, X_test, y_test)
 ada_results = evaluate_model("AdaBoost",      best_ada, X_test, y_test)
 
-# =========================================================
-# 9) Summary comparison table (like before)
-# =========================================================
+
+# Summary comparison table
+
 print("\n============== SUMMARY COMPARISON (TEST SET) ==============")
 print(f"{'Model':15s}  {'Accuracy':9s}  {'F1 (1)':9s}  {'ROC-AUC':9s}")
 for res in [rf_results, ada_results]:
     print(f"{res['name']:15s}  {res['accuracy']:.4f}     {res['f1']:.4f}     {res['auc']:.4f}")
 
-# =========================================================
-# 10) Final summary of best GridSearch results (CV)
-# =========================================================
+
+# Final summary of best GridSearch results (CV)
+
 print("\n============== BEST GRIDSEARCH RESULTS (CV) ==============")
 
 print("\nRandom Forest:")

@@ -11,9 +11,9 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 
-# -------------------------
-# 1) Load train / test
-# -------------------------
+
+# Load train and test data
+
 train_path = "..\\train_dataset_balanced.xlsx"
 test_path  = "..\\test_dataset_balanced.xlsx"
 
@@ -22,15 +22,15 @@ test_df  = pd.read_excel(test_path)
 
 TARGET = "KAZA_TIPI_Yaralanmalı/Ölümlü"
 
-X_train = train_df.drop(columns=[TARGET])
+X_train = train_df.drop(columns=[TARGET,"KAZA_TIPI"])
 y_train = train_df[TARGET].astype(int)
 
-X_test  = test_df.drop(columns=[TARGET])
+X_test  = test_df.drop(columns=[TARGET,"KAZA_TIPI"])
 y_test  = test_df[TARGET].astype(int)
 
-# -------------------------
-# 2) Preprocess (all features categorical)
-# -------------------------
+
+# Preprocess (all features categorical)
+
 cat_cols = X_train.columns.tolist()
 
 # OneHotEncoder compatibility for different sklearn versions
@@ -65,9 +65,9 @@ model = Pipeline(steps=[
     ("rf", rf)
 ])
 
-# -------------------------
-# 4) GridSearchCV: hyperparameter optimization
-# -------------------------
+
+# GridSearchCV: hyperparameter optimization
+
 param_grid = {
     "rf__n_estimators": [200, 400, 600],
     "rf__max_depth": [None, 10, 20],
@@ -99,9 +99,9 @@ for k, v in grid_search.best_params_.items():
 # Best model (pipeline with best RF inside)
 best_model = grid_search.best_estimator_
 
-# -------------------------
-# 5) Evaluate on TEST set
-# -------------------------
+
+# Evaluate on TEST set
+
 y_pred  = best_model.predict(X_test)
 y_proba = best_model.predict_proba(X_test)[:, 1]
 
@@ -120,9 +120,9 @@ print(cm)
 print("\nClassification Report:")
 print(classification_report(y_test, y_pred, target_names=["Non-severe (0)", "Severe (1)"]))
 
-# -------------------------
-# 6) (Optional) Feature importance grouped by original column
-# -------------------------
+
+# (Optional) Feature importance grouped by original column
+
 feature_names = best_model.named_steps["preprocess"].get_feature_names_out()
 importances   = best_model.named_steps["rf"].feature_importances_
 
