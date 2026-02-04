@@ -1,3 +1,9 @@
+"""
+This script standardizes the 'ISTIKAMET' (direction) column
+"""
+# Step 1 of data cleaning pipeline:
+# Direction → Incident Type → Street
+
 import pandas as pd
 import numpy as np
 
@@ -5,6 +11,8 @@ file_path = "..\\izbb-kaza-ariza-verileri.xlsx"
 df = pd.read_excel(file_path, sheet_name="Sayfa1")
 
 if "ISTIKAMET" in df.columns:
+
+    # Capitalize only the first letter keep the rest same
     def cap_first_keep_rest(x):
         if isinstance(x, str) and len(x) > 0:
             return x[0].upper() + x[1:]
@@ -17,7 +25,7 @@ if "ISTIKAMET" in df.columns:
     empty_str_rows = df[df["ISTIKAMET"] == ""]
     print(empty_str_rows)
 
-
+    # Dictionary for standardizing direction names
     replacements = {
         "Alsancak İstikameti" : "Alsancak",
         "Evka 3":"Evka-3",
@@ -65,7 +73,7 @@ if "ISTIKAMET" in df.columns:
 
     output_path = "izbb-kaza-ariza-verileri-cleaned-direction.xlsx"
     df.to_excel(output_path, index=False)
-    print(f"\n✅ Cleaned dataset saved to: {output_path}")
+    print(f"\nCleaned dataset saved to: {output_path}")
 
 else:
-    print("❌ Column 'ISTIKAMET' not found in the Excel file.")
+    print("Column 'ISTIKAMET' not found in the Excel file.")
