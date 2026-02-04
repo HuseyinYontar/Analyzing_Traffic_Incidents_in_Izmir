@@ -12,12 +12,10 @@ from sklearn.metrics import f1_score, make_scorer
 
 from sklearn.linear_model import LogisticRegression
 
-# Logistic Regression / genel convergence uyarılarını susturmak istersen:
+
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
-# ---------------------------------------------------------
-# 1) TRAIN & TEST veri setlerini yükle
-# ---------------------------------------------------------
+# Load balanced training and test datasets
 train_path = r"..\train_dataset_balanced.xlsx"
 test_path  = r"..\test_dataset_balanced.xlsx"
 train_df = pd.read_excel(train_path)
@@ -28,9 +26,7 @@ print("TEST shape:", test_df.shape)
 print("TRAIN columns:", train_df.columns.tolist())
 print("TEST columns:", test_df.columns.tolist())
 
-# ---------------------------------------------------------
-# 2) Hedef değişken
-# ---------------------------------------------------------
+# Target: whether the incident is fatal or not (binary classification)
 target_col = "KAZA_TIPI_Yaralanmalı/Ölümlü"
 
 if target_col not in train_df.columns:
@@ -41,12 +37,10 @@ if target_col not in test_df.columns:
 print("\nTRAIN target distribution:\n", train_df[target_col].value_counts())
 print("\nTEST target distribution:\n", test_df[target_col].value_counts())
 
-# ---------------------------------------------------------
-# 3) Feature kolonları (hedef dışındaki tüm kolonlar)
-# ---------------------------------------------------------
+# Separate feature columns and target column for training and testing sets
 feature_cols = [c for c in train_df.columns if c != target_col]
 
-print("\nKullanılacak feature kolonları:")
+print("\nFeature columns:")
 print(feature_cols)
 
 X_train = train_df[feature_cols]
@@ -58,11 +52,8 @@ y_test = test_df[target_col]
 print("\nX_train shape:", X_train.shape)
 print("X_test shape:", X_test.shape)
 
-# ---------------------------------------------------------
-# 4) One-Hot Encoding tanımı
-#    (Bu veri setinde tüm feature'lar kategorik varsayıldı)
-# ---------------------------------------------------------
-categorical_cols = feature_cols
+# One Hot Encoding
+categorical_cols = feature_cols # All feature columns are categorical
 
 preprocess = ColumnTransformer(
     transformers=[
@@ -71,11 +62,9 @@ preprocess = ColumnTransformer(
     remainder="drop"
 )
 
-# ---------------------------------------------------------
-# 5) GridSearch için LOGISTIC REGRESSION pipeline
-# ---------------------------------------------------------
+# Train a Logistic Regression model with hyperparameter tuning using GridSearchCV.
 log_reg_base = LogisticRegression(
-    solver="saga",        # sparse + çok feature için uygun
+    solver="saga",
     penalty="l2",
     random_state=42,
     max_iter=5000,
@@ -94,7 +83,7 @@ param_grid = {
     "model__class_weight": [None, "balanced"],
 }
 
-scorer = make_scorer(f1_score, pos_label=1)  # ağır kazanın F1'i önemli
+scorer = make_scorer(f1_score, pos_label=1)  # F1-score is prioritized for severe (fatal) accidents
 
 grid = GridSearchCV(
     estimator=pipe,
@@ -105,17 +94,15 @@ grid = GridSearchCV(
     verbose=2,
 )
 
-print("\nLogistic Regression GridSearchCV başlıyor...")
+print("\nLogistic Regression GridSearchCV starting...")
 grid.fit(X_train, y_train)
 
-print("\nEn iyi parametreler:", grid.best_params_)
-print("CV en iyi F1 (class 1):", grid.best_score_)
+print("\nBest Parameters:", grid.best_params_)
+print("Best CV F1 (class 1):", grid.best_score_)
 
 best_model = grid.best_estimator_
 
-# ---------------------------------------------------------
-# 6) Test set performansı (best model ile)
-# ---------------------------------------------------------
+# Scores of the best  model
 y_pred = best_model.predict(X_test)
 
 print("\n=== Logistic Regression (Best GridSearch Model) Results ===")

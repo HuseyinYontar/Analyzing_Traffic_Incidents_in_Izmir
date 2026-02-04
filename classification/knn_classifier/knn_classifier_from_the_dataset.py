@@ -13,9 +13,8 @@ from sklearn.metrics import f1_score, make_scorer
 
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
-# ---------------------------------------------------------
-# 1) TRAIN & TEST veri setlerini yükle
-# ---------------------------------------------------------
+# Load balanced training and test datasets
+
 train_path = r"..\train_dataset_balanced.xlsx"
 test_path  = r"..\test_dataset_balanced.xlsx"
 train_df = pd.read_excel(train_path)
@@ -26,9 +25,7 @@ print("TEST shape:", test_df.shape)
 print("TRAIN columns:", train_df.columns.tolist())
 print("TEST columns:", test_df.columns.tolist())
 
-# ---------------------------------------------------------
-# 2) Hedef değişken
-# ---------------------------------------------------------
+# Target: whether the incident is fatal or not (binary classification)
 target_col = "KAZA_TIPI_Yaralanmalı/Ölümlü"
 
 if target_col not in train_df.columns:
@@ -39,12 +36,10 @@ if target_col not in test_df.columns:
 print("\nTRAIN target distribution:\n", train_df[target_col].value_counts())
 print("\nTEST target distribution:\n", test_df[target_col].value_counts())
 
-# ---------------------------------------------------------
-# 3) Feature kolonları (hedef dışındaki tüm kolonlar)
-# ---------------------------------------------------------
+# Separate feature columns and target column for training and testing sets
 feature_cols = [c for c in train_df.columns if c != target_col]
 
-print("\nKullanılacak feature kolonları:")
+print("\nFeautre Columns:")
 print(feature_cols)
 
 X_train = train_df[feature_cols]
@@ -56,10 +51,8 @@ y_test = test_df[target_col]
 print("\nX_train shape:", X_train.shape)
 print("X_test shape:", X_test.shape)
 
-# ---------------------------------------------------------
-# 4) One-Hot Encoding (bütün feature'lar kategorik)
-# ---------------------------------------------------------
-categorical_cols = feature_cols
+# One Hot Encoding
+categorical_cols = feature_cols # All feature columns are categorical
 
 preprocess = ColumnTransformer(
     transformers=[
@@ -68,9 +61,7 @@ preprocess = ColumnTransformer(
     remainder="drop"
 )
 
-# ---------------------------------------------------------
-# 5) GridSearch için KNN pipeline
-# ---------------------------------------------------------
+# Train a K-Nearest Neighbors (KNN) model with hyperparameter tuning using GridSearchCV.
 knn_base = KNeighborsClassifier()
 
 pipe = Pipeline(
@@ -86,7 +77,7 @@ param_grid = {
     "model__p": [1, 2],  # 1: Manhattan, 2: Euclidean
 }
 
-scorer = make_scorer(f1_score, pos_label=1)  # ağır kazanın F1'i önemli
+scorer = make_scorer(f1_score, pos_label=1)  # F1-score is prioritized for severe (fatal) accidents
 
 grid = GridSearchCV(
     estimator=pipe,
@@ -97,17 +88,15 @@ grid = GridSearchCV(
     verbose=2,
 )
 
-print("\nGridSearchCV (KNN) başlıyor...")
+print("\nGridSearchCV (KNN) is starting...")
 grid.fit(X_train, y_train)
 
-print("\nEn iyi parametreler:", grid.best_params_)
-print("CV en iyi F1 (class 1):", grid.best_score_)
+print("\nBest Parameters:", grid.best_params_)
+print("Best CV F1 (class 1):", grid.best_score_)
 
 best_model = grid.best_estimator_
 
-# ---------------------------------------------------------
-# 6) Test set performansı (best KNN modeli ile)
-# ---------------------------------------------------------
+# Scores of the best tuned model on the test set
 y_pred = best_model.predict(X_test)
 
 print("\n=== KNN (Best GridSearch Model) Results ===")

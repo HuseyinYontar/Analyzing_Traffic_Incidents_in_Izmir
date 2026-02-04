@@ -16,19 +16,19 @@ from sklearn.metrics import f1_score, make_scorer
 import matplotlib.pyplot as plt
 
 
-# =========================================================
-# 0) ENGLISH MAPPINGS (extend as needed)
-# =========================================================
+# Month Mapping
 MONTH_MAP = {
     1: "January", 2: "February", 3: "March", 4: "April", 5: "May", 6: "June",
     7: "July", 8: "August", 9: "September", 10: "October", 11: "November", 12: "December"
 }
+
+# Day mapping
 DOW_MAP = {
     0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday",
     4: "Friday", 5: "Saturday", 6: "Sunday"
 }
 
-# Translate common Turkish category values -> English (add your dataset-specific ones here)
+# Translate Turkish to English
 VAL_MAP = {
     "Kış": "Winter",
     "İlkbahar": "Spring",
@@ -59,9 +59,7 @@ BASE_MAP = {
 }
 
 
-# =========================================================
 # Helpers
-# =========================================================
 def resolve_excel_path(fp):
     """
     Makes pd.read_excel robust against path_getter returning list/tuple, etc.
@@ -119,9 +117,7 @@ def translate_ohe_name(ohe_name: str, original_cols):
     return f"{base_en}={val_en}"
 
 
-# =========================================================
-# 1) Load data
-# =========================================================
+# Load Data
 file_path_raw = get_path_for_binned_directory_in()
 file_path = resolve_excel_path(file_path_raw)
 
@@ -134,9 +130,7 @@ print("Raw shape:", df.shape)
 print("Columns:", df.columns.tolist())
 
 
-# =========================================================
-# 2) Engineer time/date features in ENGLISH
-# =========================================================
+
 if "TARIH" in df.columns:
     df["TARIH"] = pd.to_datetime(df["TARIH"], errors="coerce")
     df["AY_ADI"] = df["TARIH"].dt.month.map(MONTH_MAP).fillna("Unknown")
@@ -151,9 +145,9 @@ else:
     print("WARNING: 'KAZA_ZAMANI' column not found -> SAAT_ARALIGI_STR not created.")
 
 
-# =========================================================
-# 3) Drop unwanted columns
-# =========================================================
+
+# Drop unwanted columns
+
 cols_to_drop = [
     "TARIH",
     "TUR",
@@ -172,9 +166,7 @@ df = df.drop(columns=[c for c in cols_to_drop if c in df.columns])
 print("\nColumns after drop:", df.columns.tolist())
 
 
-# =========================================================
-# 4) Build binary target
-# =========================================================
+# Target: whether the incident is fatal or not (binary classification)
 if "KAZA_TIPI" not in df.columns:
     raise KeyError("KAZA_TIPI column is missing. Check your input file / preprocessing.")
 
@@ -193,18 +185,14 @@ print("\nTarget value counts (0=Other, 1=Injury/Fatal):")
 print(df[target_col].value_counts())
 
 
-# =========================================================
-# 5) Select features (exclude KAZA_TIPI* columns)
-# =========================================================
+# Exclude target and KAZA_TIPI columns
 all_cols = df.columns.tolist()
 feature_cols = [c for c in all_cols if c != target_col and not c.startswith("KAZA_TIPI")]
 print("\nFeature columns used:")
 print(feature_cols)
 
 
-# =========================================================
-# 6) Balanced split: 2160 pos + 2160 neg for TRAIN, rest for TEST
-# =========================================================
+# Create balanced train–test splits
 df_pos = df[df[target_col] == 1].sample(frac=1, random_state=42)
 df_neg = df[df[target_col] == 0].sample(frac=1, random_state=42)
 
@@ -229,19 +217,15 @@ print("\nTRAIN size:", len(train_df), " | pos:", int(train_df[target_col].sum())
 print("TEST  size:", len(test_df),  " | pos:", int(test_df[target_col].sum()),  " | neg:", int(len(test_df) - test_df[target_col].sum()))
 
 
-# =========================================================
-# 7) X / y
-# =========================================================
+# Separate feature columns and target column for training and testing sets
 X_train = train_df[feature_cols]
 y_train = train_df[target_col]
 X_test = test_df[feature_cols]
 y_test = test_df[target_col]
 
 
-# =========================================================
-# 8) One-Hot Encoding (all categorical, like your setup)
-# =========================================================
-categorical_cols = X_train.columns.tolist()
+# One Hot Encoding
+categorical_cols = X_train.columns.tolist() # All feature columns are categorical.
 
 preprocess = ColumnTransformer(
     transformers=[("cat", OneHotEncoder(handle_unknown="ignore"), categorical_cols)],
@@ -249,9 +233,7 @@ preprocess = ColumnTransformer(
 )
 
 
-# =========================================================
-# 9) Decision Tree + GridSearch
-# =========================================================
+# Train a Decision Tree model with hyperparameter tuning using GridSearchCV.
 pipe = Pipeline(steps=[
     ("preprocess", preprocess),
     ("model", DecisionTreeClassifier(random_state=42)),
@@ -268,7 +250,7 @@ param_grid = {
 grid = GridSearchCV(
     estimator=pipe,
     param_grid=param_grid,
-    scoring=make_scorer(f1_score, pos_label=1),
+    scoring=make_scorer(f1_score, pos_label=1),  # F1-score is prioritized for severe (fatal) accidents
     cv=5,
     n_jobs=-1,
     verbose=2,
@@ -283,9 +265,9 @@ print("Best CV F1 (class 1):", grid.best_score_)
 best_model = grid.best_estimator_
 
 
-# =========================================================
-# 10) Dummy baseline
-# =========================================================
+
+# Dummy baseline
+
 dummy = DummyClassifier(strategy="most_frequent")
 dummy.fit(X_train, y_train)
 y_dummy = dummy.predict(X_test)
@@ -295,9 +277,9 @@ print("Accuracy:", accuracy_score(y_test, y_dummy))
 print("Confusion matrix:\n", confusion_matrix(y_test, y_dummy))
 
 
-# =========================================================
-# 11) Test performance
-# =========================================================
+
+# Test performance
+
 y_pred = best_model.predict(X_test)
 
 print("\n=== Decision Tree (Best GridSearch Model) Results ===")
@@ -306,9 +288,9 @@ print("Classification report:\n", classification_report(y_test, y_pred))
 print("Confusion matrix:\n", confusion_matrix(y_test, y_pred))
 
 
-# =========================================================
-# 12) ENGLISH tree plotting + ENGLISH rule export
-# =========================================================
+
+# Plot the Decision Tree and export decision rules in English
+
 dt_clf = best_model.named_steps["model"]
 ohe = best_model.named_steps["preprocess"].named_transformers_["cat"]
 
@@ -316,7 +298,7 @@ ohe_feature_names = ohe.get_feature_names_out(categorical_cols)
 feature_names_en = [translate_ohe_name(n, categorical_cols) for n in ohe_feature_names]
 class_names_en = ["Other", "Injury/Fatal"]
 
-# A) Full tree (very large)
+# Full tree (very large)
 plt.figure(figsize=(80, 40))
 plot_tree(
     dt_clf,
@@ -331,7 +313,7 @@ plt.savefig("decision_tree_full_EN.pdf", format="pdf", bbox_inches="tight")
 plt.close()
 print("Saved: decision_tree_full_EN.pdf")
 
-# B) Top of tree (paper-friendly)
+# Top of tree (Max Depth 3)
 plt.figure(figsize=(20, 10))
 plot_tree(
     dt_clf,

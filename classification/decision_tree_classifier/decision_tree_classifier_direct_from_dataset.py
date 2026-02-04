@@ -12,9 +12,7 @@ from sklearn.metrics import f1_score, make_scorer
 
 import matplotlib.pyplot as plt
 
-# ---------------------------------------------------------
-# Boolean karar ağacı yazdırma fonksiyonu (metin)
-# ---------------------------------------------------------
+
 def print_boolean_tree(clf, feature_names, class_names, node_id=0, depth=0):
     tree = clf.tree_
     indent = "  " * depth
@@ -48,9 +46,8 @@ def print_boolean_tree(clf, feature_names, class_names, node_id=0, depth=0):
         print(f"{indent}▶ {class_label} (samples={n_samples})")
 
 
-# ---------------------------------------------------------
-# 1) TRAIN & TEST veri setlerini yükle (hazır balanced + dropped versiyonlar)
-# ---------------------------------------------------------
+# Load balanced training and test datasets
+
 train_path = r"..\train_dataset_balanced.xlsx"
 test_path  = r"..\test_dataset_balanced.xlsx"
 
@@ -62,9 +59,9 @@ print("TEST shape:", test_df.shape)
 print("TRAIN columns:", train_df.columns.tolist())
 print("TEST columns:", test_df.columns.tolist())
 
-# ---------------------------------------------------------
-# 2) Binary hedef değişken
-# ---------------------------------------------------------
+
+# Target: whether the incident is fatal or not (binary classification)
+
 target_col = "KAZA_TIPI_Yaralanmalı/Ölümlü"
 
 if target_col not in train_df.columns:
@@ -77,20 +74,17 @@ print(train_df[target_col].value_counts())
 print("\nTEST target value counts (0: diğer, 1: Yaralanmalı/Ölümlü):")
 print(test_df[target_col].value_counts())
 
-# ---------------------------------------------------------
-# 3) Feature kolonları
-# ---------------------------------------------------------
+
 feature_cols = [
     c for c in train_df.columns
     if c != target_col
 ]
 
-print("\nKullanılacak feature kolonları:")
+print("\nFeature Columns:")
 print(feature_cols)
 
-# ---------------------------------------------------------
-# 4) X / y ayır
-# ---------------------------------------------------------
+# Separate feature columns and target column for training and testing sets
+
 X_train = train_df[feature_cols]
 y_train = train_df[target_col]
 
@@ -100,10 +94,10 @@ y_test = test_df[target_col]
 print("\nX_train shape:", X_train.shape)
 print("X_test shape:", X_test.shape)
 
-# ---------------------------------------------------------
-# 5) One-Hot Encoding
-# ---------------------------------------------------------
-categorical_cols = feature_cols  # hepsi kategorik kabul
+
+# One Hot Encoding
+
+categorical_cols = feature_cols  # All feature columns are categorical
 
 preprocess = ColumnTransformer(
     transformers=[
@@ -112,9 +106,8 @@ preprocess = ColumnTransformer(
     remainder="drop"
 )
 
-# ---------------------------------------------------------
-# 6) Decision Tree pipeline + GridSearch
-# ---------------------------------------------------------
+
+# Train a Decision Tree model with hyperparameter tuning using GridSearchCV.
 dt_base = DecisionTreeClassifier(random_state=42)
 
 pipe = Pipeline(
@@ -132,7 +125,7 @@ param_grid = {
     "model__max_features": [None, "sqrt"],
 }
 
-scorer = make_scorer(f1_score, pos_label=1)
+scorer = make_scorer(f1_score, pos_label=1) # F1-score is prioritized for severe (fatal) accidents
 
 grid = GridSearchCV(
     estimator=pipe,
@@ -143,17 +136,16 @@ grid = GridSearchCV(
     verbose=2,
 )
 
-print("\nGridSearchCV (Decision Tree) başlıyor...")
+print("\nGridSearchCV (Decision Tree) is starting...")
 grid.fit(X_train, y_train)
 
-print("\nEn iyi parametreler:", grid.best_params_)
-print("CV en iyi F1 (class 1):", grid.best_score_)
+print("\nBest Decision Tree Parameters:", grid.best_params_)
+print("Best CV F1 (class 1):", grid.best_score_)
 
 best_model = grid.best_estimator_
 
-# ---------------------------------------------------------
-# 7) Dummy baseline
-# ---------------------------------------------------------
+
+# Dummy Baseline
 dummy = DummyClassifier(strategy="most_frequent")
 dummy.fit(X_train, y_train)
 y_dummy = dummy.predict(X_test)
@@ -163,9 +155,8 @@ print("Accuracy:", accuracy_score(y_test, y_dummy))
 print("Classification report:\n", classification_report(y_test, y_dummy))
 print("Confusion matrix:\n", confusion_matrix(y_test, y_dummy))
 
-# ---------------------------------------------------------
-# 8) Test set performansı (Decision Tree)
-# ---------------------------------------------------------
+
+# Scores of the best tuned model on the test set
 y_pred = best_model.predict(X_test)
 
 print("\n=== Decision Tree (Best GridSearch Model) Results ===")
@@ -173,9 +164,8 @@ print("Accuracy:", accuracy_score(y_test, y_pred))
 print("\nClassification report:\n", classification_report(y_test, y_pred))
 print("Confusion matrix:\n", confusion_matrix(y_test, y_pred))
 
-# ---------------------------------------------------------
-# 9) Ağaç görselleştirme (sade feature/class label)
-# ---------------------------------------------------------
+#Visualizing the Trained Decision Tree
+
 preprocess_best = best_model.named_steps["preprocess"]
 tree_clf = best_model.named_steps["model"]
 
@@ -197,7 +187,7 @@ for name in ohe_feature_names:
         simplified = col
     simplified_feature_names.append(simplified)
 
-print("\nOne-hot sonrası feature sayısı:", len(simplified_feature_names))
+print("\nFeatuer count after One-hot :", len(simplified_feature_names))
 
 fig, ax = plt.subplots(figsize=(40, 20))
 texts = plot_tree(
@@ -210,7 +200,7 @@ texts = plot_tree(
     max_depth=None
 )
 
-# Label'ları sadeleştir
+# Clean labels
 for t in texts:
     s = t.get_text()
     lines = s.split("\n")
@@ -238,10 +228,8 @@ plt.savefig(
 plt.close()
 print("\nClean-labeled full tree saved as 'decision_tree_full_clean_labels_from_files.pdf'")
 
-# ---------------------------------------------------------
-# 10) BOOLEAN kurallar (metin)
-# ---------------------------------------------------------
-print("\n=== BOOLEAN KARAR AĞACI (sadece feature adı + True/False + leaf sınıf) ===")
+# Boolean Rules
+print("\n=== BOOLEAN Decision Tree ===")
 print_boolean_tree(
     tree_clf,
     simplified_feature_names,

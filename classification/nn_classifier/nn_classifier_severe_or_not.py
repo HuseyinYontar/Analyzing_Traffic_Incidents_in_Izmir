@@ -15,33 +15,25 @@ import warnings
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import f1_score, make_scorer
 
-# MLP'nin convergence uyarılarını susturmak istersen:
+
 warnings.filterwarnings("ignore", category=ConvergenceWarning)
 
-# ---------------------------------------------------------
-# 1) Veri setini yükle
-# ---------------------------------------------------------
+# Load Data
 file_path = get_path_for_binned_directory_in()
 df = pd.read_excel(file_path)
 
 print("Raw shape:", df.shape)
 print("Columns:", df.columns.tolist())
 
-# ---------------------------------------------------------
-# 2) TARIH ve KAZA_ZAMANI'ndan yeni feature'lar üret
-#    - AY_ADI: January, February, ...
-#    - GUN_BILGISI: Monday, Tuesday, ...
-#    - SAAT_ARALIGI_STR: 00:00-01:00, 01:00-02:00 ...
-# ---------------------------------------------------------
-# TARIH'i datetime'a çevir
+# Use TARIH and KAZA_ZAMANI and create new features
 if "TARIH" in df.columns:
     df["TARIH"] = pd.to_datetime(df["TARIH"], errors="coerce")
     df["AY_ADI"] = df["TARIH"].dt.month_name().fillna("Unknown")
     df["GUN_BILGISI"] = df["TARIH"].dt.day_name().fillna("Unknown")
 else:
-    print("UYARI: 'TARIH' kolonu bulunamadı, AY_ADI / GUN_BILGISI oluşturulamadı.")
+    print("Warning: there is no 'TARIH' column")
 
-# KAZA_ZAMANI'nı datetime'a çevir (sadece saat kısmı önemli)
+# Convert KAZA_ZAMANI to datetime
 if "KAZA_ZAMANI" in df.columns:
     df["KAZA_ZAMANI"] = pd.to_datetime(df["KAZA_ZAMANI"], errors="coerce")
 
@@ -54,16 +46,13 @@ if "KAZA_ZAMANI" in df.columns:
 
     df["SAAT_ARALIGI_STR"] = df["KAZA_ZAMANI"].apply(hour_to_interval)
 else:
-    print("UYARI: 'KAZA_ZAMANI' kolonu bulunamadı, SAAT_ARALIGI_STR oluşturulamadı.")
+    print("Warning: there is no 'KAZA_ZAMANI' column")
 
-print("\nÖrnek AY_ADI:", df.get("AY_ADI", pd.Series()).unique()[:10])
-print("Örnek GUN_BILGISI:", df.get("GUN_BILGISI", pd.Series()).unique()[:10])
-print("Örnek SAAT_ARALIGI_STR:", df.get("SAAT_ARALIGI_STR", pd.Series()).unique()[:10])
+print("\nExample AY_ADI:", df.get("AY_ADI", pd.Series()).unique()[:10])
+print("Example GUN_BILGISI:", df.get("GUN_BILGISI", pd.Series()).unique()[:10])
+print("Example SAAT_ARALIGI_STR:", df.get("SAAT_ARALIGI_STR", pd.Series()).unique()[:10])
 
-# ---------------------------------------------------------
-# 3) Kullanmak istemediğin kolonları düş
-#    (AY_ADI, GUN_BILGISI ve SAAT_ARALIGI_STR kalıyor)
-# ---------------------------------------------------------
+# Drop unwanted columns
 cols_to_drop = [
     "TARIH",
     "TUR",
@@ -83,12 +72,10 @@ cols_to_drop = [
 cols_to_drop_existing = [c for c in cols_to_drop if c in df.columns]
 df = df.drop(columns=cols_to_drop_existing)
 
-print("\nDrop sonrası kolonlar:", df.columns.tolist())
+print("\nColumns after drop:", df.columns.tolist())
 
-# ---------------------------------------------------------
-# 4) Binary hedef değişkeni oluştur (Yaralanmalı/Ölümlü: 1, diğerleri: 0)
-# ---------------------------------------------------------
-df = df.dropna(subset=["KAZA_TIPI"])  # güvenlik
+# Target: whether the incident is fatal or not (binary classification)
+df = df.dropna(subset=["KAZA_TIPI"])
 
 target_col = "KAZA_TIPI_Yaralanmalı/Ölümlü"
 
@@ -103,14 +90,11 @@ df[target_col] = (
 print("\nTarget value counts (0: diğer, 1: Yaralanmalı/Ölümlü):")
 print(df[target_col].value_counts())
 
-# ---------------------------------------------------------
-# 5) Feature kolonlarını seç
-#    - Tüm KAZA_TIPI* kolonlarını feature'lardan çıkar (leak olmasın)
-# ---------------------------------------------------------
+# Exclude target and KAZA_TIPI columns
 all_cols = df.columns.tolist()
 kaza_tipi_cols = [c for c in all_cols if c.startswith("KAZA_TIPI")]
 
-print("\nKAZA_TIPI ile başlayan kolonlar (feature'lardan çıkarılacak):")
+print("\nColumnns starting with KAZA_TIPI will be removed:")
 print(kaza_tipi_cols)
 
 feature_cols = [
@@ -118,17 +102,15 @@ feature_cols = [
     if c != target_col and not c.startswith("KAZA_TIPI")
 ]
 
-print("\nKullanılacak feature kolonları:")
+print("\nFeauture columns:")
 print(feature_cols)
 
-# ---------------------------------------------------------
-# 6) 2160 pozitif + 2160 negatif ile TRAIN, kalanlardan 50–50 TEST
-# ---------------------------------------------------------
+# Create balanced train–test splits
 df_pos = df[df[target_col] == 1].sample(frac=1, random_state=42)  # shuffle
 df_neg = df[df[target_col] == 0].sample(frac=1, random_state=42)
 
-print("\nToplam pozitif (1) sayısı:", len(df_pos))
-print("Toplam negatif (0) sayısı:", len(df_neg))
+print("\nTotal positive (1) sayısı:", len(df_pos))
+print("Total negative (0) sayısı:", len(df_neg))
 
 requested_n_train_per_class = 2160
 
@@ -140,8 +122,8 @@ n_train_per_class = min(
 
 if n_train_per_class < requested_n_train_per_class:
     print(
-        f"\nUYARI: Yeterli örnek olmadığı için eğitimde her sınıftan "
-        f"{requested_n_train_per_class} yerine {n_train_per_class} kullanılacak."
+        f"\nWarning: There is not enough samples."
+        f"Instead of {requested_n_train_per_class} , {n_train_per_class} will be used."
     )
 
 # TRAIN set
@@ -149,7 +131,7 @@ train_pos = df_pos.iloc[:n_train_per_class]
 train_neg = df_neg.iloc[:n_train_per_class]
 train_df = pd.concat([train_pos, train_neg]).sample(frac=1, random_state=42)
 
-# Kalanlarla TEST seti
+# TEST set
 test_pos_rem = df_pos.iloc[n_train_per_class:]
 test_neg_rem = df_neg.iloc[n_train_per_class:]
 
@@ -159,18 +141,16 @@ test_pos = test_pos_rem.iloc[:n_test_per_class]
 test_neg = test_neg_rem.iloc[:n_test_per_class]
 test_df = pd.concat([test_pos, test_neg]).sample(frac=1, random_state=42)
 
-print("\nTRAIN set boyutu:", len(train_df))
-print("  -> Pozitif (1):", train_df[target_col].sum())
-print("  -> Negatif (0):", len(train_df) - train_df[target_col].sum())
+print("\nTRAIN set size:", len(train_df))
+print("  -> Positive (1):", train_df[target_col].sum())
+print("  -> Negative (0):", len(train_df) - train_df[target_col].sum())
 
-print("\nTEST set boyutu:", len(test_df))
-print("  -> Pozitif (1):", test_df[target_col].sum())
-print("  -> Negatif (0):", len(test_df) - test_df[target_col].sum())
+print("\nTEST set size:", len(test_df))
+print("  -> Positive (1):", test_df[target_col].sum())
+print("  -> Negative (0):", len(test_df) - test_df[target_col].sum())
 
-# ---------------------------------------------------------
-# 6.5) TRAIN ve TEST setlerini Excel'e kaydet
-# ---------------------------------------------------------
-output_dir = os.path.dirname(file_path)  # Orijinal verinin olduğu klasör
+# Save train and test dataset
+output_dir = os.path.dirname(file_path)
 
 train_out_path = os.path.join(output_dir, "train_dataset_balanced.xlsx")
 test_out_path  = os.path.join(output_dir, "test_dataset_balanced.xlsx")
@@ -178,12 +158,10 @@ test_out_path  = os.path.join(output_dir, "test_dataset_balanced.xlsx")
 train_df.to_excel(train_out_path, index=False)
 test_df.to_excel(test_out_path, index=False)
 
-print(f"\nTRAIN dataset kaydedildi: {train_out_path}")
-print(f"TEST dataset kaydedildi:  {test_out_path}")
+print(f"\nTRAIN dataset saved: {train_out_path}")
+print(f"TEST dataset saved:  {test_out_path}")
 
-# ---------------------------------------------------------
-# 7) X / y ayır
-# ---------------------------------------------------------
+# Separate feature columns and target column for training and testing sets
 X_train = train_df[feature_cols]
 y_train = train_df[target_col]
 
@@ -192,12 +170,11 @@ y_test = test_df[target_col]
 
 print("\nX_train shape:", X_train.shape)
 print("X_test shape:", X_test.shape)
-# ---------------------------------------------------------
-# 8) One-Hot Encoding tanımı  (NN dense input needs dense array)
-# ---------------------------------------------------------
+
+# One Hot Encoding
 import numpy as np
 
-categorical_cols = X_train.columns.tolist()
+categorical_cols = X_train.columns.tolist() # All feature columns are categorical
 
 preprocess = ColumnTransformer(
     transformers=[
@@ -206,9 +183,7 @@ preprocess = ColumnTransformer(
     remainder="drop"
 )
 
-# ---------------------------------------------------------
-# 9) Torch tabanlı NN estimator + GridSearchCV (NO sklearn MLP)
-# ---------------------------------------------------------
+# Train a PyTorch-based Neural Network classifier with hyperparameter tuning using GridSearchCV.
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -448,17 +423,15 @@ grid = GridSearchCV(
     verbose=2,
 )
 
-print("\nGridSearchCV (Torch NN) başlıyor...")
+print("\nGridSearchCV (Torch NN) starting...")
 grid.fit(X_train, y_train)
 
-print("\nEn iyi parametreler:", grid.best_params_)
-print("CV en iyi F1 (class 1):", grid.best_score_)
+print("\nBest Parameters:", grid.best_params_)
+print("Best CV F1 (class 1):", grid.best_score_)
 
 best_model = grid.best_estimator_
 
-# ---------------------------------------------------------
-# 10) Test set performansı (best model ile)
-# ---------------------------------------------------------
+# Scores of the best tuned model on the test set
 y_pred = best_model.predict(X_test)
 
 print("\n=== Torch NN (Best GridSearch Model) Results ===")
