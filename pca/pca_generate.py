@@ -5,17 +5,17 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from pathlib import Path
 
-# ========= Paths =========
-file_path = "denememul.xlsx"
+# Paths
+file_path = "izbb-kaza-ariza-verileri-SON-binned-frequent-accident_types_encoded_multiplied.xlsx"
 out_dir = Path(".")
 
-# ========= Load =========
+# Load Data
 df = pd.read_excel(file_path)
 print("Raw shape:", df.shape)
 print("Columns:", df.columns.tolist())
 
-# ========= KAZA_TIPI one-hot sütunlarını bul =========
-kaza_ohe_cols = [c for c in df.columns if c.startswith("KAZA_TIPI_")]
+# Find KAZA_TIPI  columns
+kaza_ohe_cols = [c for c in df.columns if c.startswith("INCIDENT_TYPE_")]
 if not kaza_ohe_cols:
     raise ValueError("No KAZA_TIPI_* one-hot columns found.")
 print("Using KAZA_TIPI one-hot columns:", kaza_ohe_cols)
@@ -23,23 +23,23 @@ print("Using KAZA_TIPI one-hot columns:", kaza_ohe_cols)
 ohe_vals = df[kaza_ohe_cols].fillna(0).to_numpy()
 
 def infer_kaza_label(row_vals, cols):
-    """One-hot'tan Türkçe label çıkar. Hepsi 0 ise 'Unknown' döner."""
+
     idx = np.argmax(row_vals)
     if row_vals[idx] <= 0:
         return "Unknown"
     return cols[idx].replace("KAZA_TIPI_", "").strip()
 
-# Satır satır Türkçe label üret
+
 raw_labels = [
     infer_kaza_label(ohe_vals[i, :], kaza_ohe_cols)
     for i in range(len(df))
 ]
 kaza_labels_tr = pd.Series(raw_labels, name="KAZA_TIPI_TR")
 
-# Unknown olanları zorunlu olarak 'Yaralanmalı/Ölümlü' yap
+
 kaza_labels_tr = kaza_labels_tr.replace("Unknown", "Yaralanmalı/Ölümlü")
 
-# Türkçe -> INCIDENT_TYPE_* mapping
+# Turkish -> INCIDENT_TYPE_* mapping
 label_map = {
     "Arıza": "INCIDENT_TYPE_Breakdown",
     "Maddi Hasarlı": "INCIDENT_TYPE_Property Damage",
@@ -51,13 +51,13 @@ incident_labels.name = "INCIDENT_TYPE"
 
 print("Label counts (INCIDENT_TYPE):\n", incident_labels.value_counts())
 
-# ========= Features: TÜM SÜTUNLAR =========
+# Features: All Columns
 feature_cols = df.columns.tolist()
 print("Using feature columns:", feature_cols)
 
 X = df[feature_cols].fillna(0).to_numpy()
 
-# ========= PCA =========
+# PCA
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
@@ -68,12 +68,12 @@ evr = pca.explained_variance_ratio_
 
 pc_names = ["PC1", "PC2"]
 
-# ========= Save scores + INCIDENT_TYPE =========
+# Save scores + INCIDENT_TYPE
 scores_df = pd.DataFrame(scores, columns=pc_names)
 scores_df["INCIDENT_TYPE"] = incident_labels.values
 scores_df.to_excel(out_dir / "pca_scores_allcols_incident.xlsx", index=False)
 
-# ========= Save loadings =========
+# Save loadings
 loadings_df = pd.DataFrame(
     components.T,
     index=feature_cols,
@@ -81,7 +81,7 @@ loadings_df = pd.DataFrame(
 )
 loadings_df.to_excel(out_dir / "pca_loadings_allcols_incident.xlsx")
 
-# ========= Save explained variance =========
+# Save explained variance
 evr_df = pd.DataFrame({
     "Component": pc_names,
     "ExplainedVarianceRatio": evr,
@@ -92,7 +92,7 @@ evr_df.to_excel(
     index=False
 )
 
-# ========= Scatter PC1 vs PC2 coloured by INCIDENT_TYPE =========
+# Scatter PC1 vs PC2 coloured by INCIDENT_TYPE
 plt.figure(figsize=(8, 6))
 
 x_vals = scores[:, 0]
