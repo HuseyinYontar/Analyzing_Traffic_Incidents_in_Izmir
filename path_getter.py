@@ -11,3 +11,6 @@ def get_path_for_one_directory_in() -> str:
 
 def get_path_for_binned_directory_in() -> str:
     return "../../"+os.getenv("BINNED_DATA_FILE")
+
+def get_path_for_binned_one_directory_in() -> str:
+    return "../"+os.getenv("BINNED_DATA_FILE")
