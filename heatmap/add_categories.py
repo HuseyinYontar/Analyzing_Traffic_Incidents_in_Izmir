@@ -57,7 +57,7 @@ load_dotenv()
 
 file_path = os.getenv("CLEANED_DATA_FILE")
 
-df = pd.read_excel(r"C:\Users\Atacan\Desktop\Analyzing_Traffic_Incidents_in_Izmir\izbb_kaza-ariza-verileri-SON.xlsx")
+df = pd.read_excel(file_path)
 
 df["TARIH"] = pd.to_datetime(df["TARIH"])
 df["MEVSIM"] = df["TARIH"].apply(find_season)
@@ -89,7 +89,7 @@ print(
 )
 df.drop(columns=["kaza_zamanı"], inplace=True)
 
-df.to_excel("izbb-kaza-ariza-verileri_SON.xlsx",index=False)
+df.to_excel("izbb-kaza-ariza-verileri-SON-binned-frequent-accident_types.xlsx",index=False)
 
 
 
