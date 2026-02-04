@@ -11,9 +11,7 @@ from sklearn.dummy import DummyRegressor
 import matplotlib.pyplot as plt
 
 
-# ---------------------------------------------------------
-# Yardımcı: Güvenli MAPE hesabı
-# ---------------------------------------------------------
+# Safe mape calculation
 def safe_mape(y_true, y_pred):
     y_true = np.array(y_true)
     y_pred = np.array(y_pred)
@@ -23,11 +21,10 @@ def safe_mape(y_true, y_pred):
     return np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100.0
 
 
-# ---------------------------------------------------------
-# 1) Hazır train / test Excel dosyalarını yükle
-# ---------------------------------------------------------
-train_path = "gaziemir_train_daily_with_target.xlsx"
-test_path  = "gaziemir_test_daily_with_target.xlsx"
+# Load test and train datasets
+
+train_path = "Mürselpaşa Bulvarı_train_daily_with_target.xlsx"
+test_path  = "Mürselpaşa Bulvarı_test_daily_with_target.xlsx"
 
 df_train = pd.read_excel(train_path)
 df_test  = pd.read_excel(test_path)
@@ -37,9 +34,7 @@ print("Test shape  :", df_test.shape)
 print("Train columns:", df_train.columns.tolist())
 
 
-# ---------------------------------------------------------
-# 2) Feature / target kolonlarını ayır
-# ---------------------------------------------------------
+# Split target and feature columns
 date_col   = "TARIH_DATE"
 target_col = "KAZA_SAYISI"
 
@@ -60,9 +55,7 @@ train_dates = pd.to_datetime(df_train[date_col])
 test_dates  = pd.to_datetime(df_test[date_col])
 
 
-# ---------------------------------------------------------
-# 2.bis) Train için WEEKLY ve MONTHLY toplamları + baseline'lar
-# ---------------------------------------------------------
+
 df_train_daily = pd.DataFrame({
     "TARIH_DATE": train_dates.values,
     "GERCEK_KAZA_SAYISI": y_train.values,
@@ -94,9 +87,9 @@ monthly_mean_baseline = df_train_monthly["GERCEK_KAZA_SAYISI"].mean()
 print("Train aylık ortalama kaza sayısı (Dummy monthly baseline):", monthly_mean_baseline)
 
 
-# ---------------------------------------------------------
-# 3) Pipeline: One-Hot + MLPRegressor
-# ---------------------------------------------------------
+
+# Pipeline: One-Hot + MLPRegressor
+
 preprocess = ColumnTransformer(
     transformers=[
         ("cat", OneHotEncoder(handle_unknown="ignore"), categorical_cols),
@@ -128,9 +121,7 @@ print("\nModel eğitiliyor (hazır daily + lag_1..lag_21 datasetleri ile)...")
 pipe.fit(X_train, y_train)
 
 
-# ---------------------------------------------------------
-# 4) DummyRegressor (train ortalaması) – günlük baseline
-# ---------------------------------------------------------
+
 X_train_dummy = np.zeros((len(X_train), 1))
 X_test_dummy  = np.zeros((len(X_test), 1))
 
@@ -139,9 +130,9 @@ dummy.fit(X_train_dummy, y_train)
 y_pred_dummy = dummy.predict(X_test_dummy)
 
 
-# ---------------------------------------------------------
-# 5) Test performansı (GÜNLÜK) – NN vs Dummy
-# ---------------------------------------------------------
+
+# Test Performance (Daily) – NN vs Dummy
+
 y_pred_nn = pipe.predict(X_test)
 
 # NN
@@ -167,7 +158,7 @@ print("RMSE  :", rmse_nn)
 print("R^2   :", r2_nn)
 print("MAPE (%):", mape_nn)
 
-print("\n--- DummyRegressor (train ortalaması) – DAILY ---")
+print("\n--- DummyRegressor (train mean) – DAILY ---")
 print("MAE   :", mae_dummy)
 print("MSE   :", mse_dummy)
 print("RMSE  :", rmse_dummy)
@@ -184,9 +175,9 @@ print("\nİlk 20 test günü için gerçek vs NN vs Dummy:")
 print(results_sample)
 
 
-# ---------------------------------------------------------
-# 6) WEEKLY AGGREGATION: günlük tahminlerden haftalık tahmin üret
-# ---------------------------------------------------------
+
+# WEEKLY AGGREGATION
+
 df_test_daily = pd.DataFrame({
     "TARIH_DATE": test_dates.values,
     "GERCEK_KAZA_SAYISI": y_test.values,
@@ -246,9 +237,9 @@ print("R^2   (weekly):", r2_week_dummy)
 print("MAPE (weekly, %):", mape_week_dummy)
 
 
-# ---------------------------------------------------------
-# 7) MONTHLY AGGREGATION: günlük tahminlerden aylık tahmin üret
-# ---------------------------------------------------------
+
+# MONTHLY AGGREGATION
+
 df_monthly = df_test_daily.copy()
 df_monthly["YEAR"]  = df_monthly["TARIH_DATE"].dt.year
 df_monthly["MONTH"] = df_monthly["TARIH_DATE"].dt.month
@@ -301,10 +292,7 @@ print("R^2   (monthly):", r2_month_dummy)
 print("MAPE (monthly, %):", mape_month_dummy)
 
 
-# ---------------------------------------------------------
-# 8) Basit grafikler (istersen yorum satırı yapabilirsin)
-# ---------------------------------------------------------
-# Günlük residuals
+# Plot results
 residuals = y_test.values - y_pred_nn
 
 plt.figure(figsize=(8, 5))
@@ -324,6 +312,7 @@ plt.title("Residuals Histogram (Konak – günlük)")
 plt.tight_layout()
 plt.show()
 
+# Daily
 plt.figure(figsize=(8, 5))
 plt.scatter(y_test.values, y_pred_nn, alpha=0.7)
 min_val = min(y_test.min(), y_pred_nn.min())
@@ -335,7 +324,7 @@ plt.title("Daily Actual vs Predicted (Konak)")
 plt.tight_layout()
 plt.show()
 
-# Haftalık çizgi
+# Weekly
 plt.figure(figsize=(10, 5))
 plt.plot(df_weekly["GERCEK_KAZA_SAYISI"].values, label="Actual weekly")
 plt.plot(df_weekly["NN_TAHMIN"].values, label="Predicted weekly (NN)")
@@ -346,7 +335,7 @@ plt.legend()
 plt.tight_layout()
 plt.show()
 
-# Aylık çizgi
+# Monthly
 plt.figure(figsize=(10, 5))
 plt.plot(y_month_true, label="Actual monthly")
 plt.plot(y_month_nn, label="Predicted monthly (NN)")

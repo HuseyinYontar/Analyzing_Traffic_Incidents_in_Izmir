@@ -182,9 +182,9 @@ y_test = test_df[target_col]
 print("\nX_train shape:", X_train.shape)
 print("X_test shape:", X_test.shape)
 
-# ---------------------------------------------------------
-# 8) One-Hot Encoding tanımı
-# ---------------------------------------------------------
+
+# One-Hot Encoding
+
 categorical_cols = X_train.columns.tolist()
 print("\nKategori (input) kolon sayısı:", len(categorical_cols))
 
