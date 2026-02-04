@@ -6,18 +6,18 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.dummy import DummyRegressor
 from path_getter import get_path_for_binned_directory_in
 
-# ==========================================
-# 1. Load Data
-# ==========================================
+
+# Load Data
+
 file_path = get_path_for_binned_directory_in()[3:]
 try:
     df = pd.read_excel(file_path)
 except:
     df = pd.read_csv(file_path)
 
-# ==========================================
-# 2. Preprocessing
-# ==========================================
+
+# Preprocessing
+
 df.columns = df.columns.str.strip().str.upper()
 
 date_col = None
@@ -36,9 +36,9 @@ if "CADDE" in df.columns:
     df["CADDE_NORM"] = df["CADDE"].str.strip().str.upper()
 
 
-# ==========================================
-# 3. Comparison Function
-# ==========================================
+
+# Comparison Function
+
 def fit_monthly_sarima_compare_dummy(cadde_name, order=(1, 1, 1), seasonal_order=(1, 1, 1, 12), holdout=6):
     cadde_norm = cadde_name.strip().upper()
     cadde_df = df[df["CADDE_NORM"] == cadde_norm].copy()
@@ -59,7 +59,7 @@ def fit_monthly_sarima_compare_dummy(cadde_name, order=(1, 1, 1), seasonal_order
 
     print(f"Train Size: {len(train)} months | Test Size: {len(test)} months")
 
-    # --- 1. SARIMA Model ---
+    # 1. SARIMA Model
     print("Fitting SARIMA model...")
     model = SARIMAX(train, order=order, seasonal_order=seasonal_order,
                     enforce_stationarity=False, enforce_invertibility=False)
@@ -70,7 +70,7 @@ def fit_monthly_sarima_compare_dummy(cadde_name, order=(1, 1, 1), seasonal_order
     sarima_mae = mean_absolute_error(test, sarima_forecast)
     sarima_rmse = np.sqrt(mean_squared_error(test, sarima_forecast))
 
-    # --- 2. Dummy Regressor (Mean) ---
+    # 2. Dummy Regressor (Mean)
     print("Fitting Dummy Regressor (Mean)...")
     # Prepare X, y for sklearn (dummy needs 2D array, though it ignores X for 'mean' strategy)
     X_train = np.arange(len(train)).reshape(-1, 1)
@@ -81,14 +81,14 @@ def fit_monthly_sarima_compare_dummy(cadde_name, order=(1, 1, 1), seasonal_order
     dummy_model.fit(X_train, y_train)
 
     # Predict for test steps
-    # We just need to predict 'len(test)' times
+
     dummy_pred_values = dummy_model.predict(np.zeros((len(test), 1)))
     dummy_forecast = pd.Series(dummy_pred_values, index=test.index)
 
     dummy_mae = mean_absolute_error(test, dummy_forecast)
     dummy_rmse = np.sqrt(mean_squared_error(test, dummy_forecast))
 
-    # --- Comparison Output ---
+    # Comparison Output
     print("\n" + "=" * 55)
     print(f"MODEL COMPARISON: {cadde_name}")
     print("=" * 55)
@@ -103,7 +103,7 @@ def fit_monthly_sarima_compare_dummy(cadde_name, order=(1, 1, 1), seasonal_order
     else:
         print(">> SARIMA performed WORSE (higher error) than the baseline mean.")
 
-    # --- Plot ---
+    # Plot
     plt.figure(figsize=(12, 6))
     plt.plot(train.index, train, label='Train', color='gray', alpha=0.6)
     plt.plot(test.index, test, label='Test (Actual)', marker='o', color='green', linewidth=2)
@@ -120,8 +120,8 @@ def fit_monthly_sarima_compare_dummy(cadde_name, order=(1, 1, 1), seasonal_order
     plt.show()
 
 
-# ==========================================
+
 # Run
-# ==========================================
+
 if __name__ == "__main__":
     fit_monthly_sarima_compare_dummy("Yeşildere Caddesi", order=(3, 1, 5), seasonal_order=(1, 1, 1, 12))

@@ -8,7 +8,7 @@ import warnings
 import itertools
 import os
 
-# --- 1. CONFIGURATION & IMPORTS ---
+# CONFIGURATION & IMPORTS
 warnings.filterwarnings("ignore")
 
 TARGET_STREETS = [
@@ -29,7 +29,7 @@ FREQUENCIES = {
 }
 
 
-# --- 2. DATA LOADING ---
+# DATA LOADING
 def load_data():
     try:
         from path_getter import get_path_for_binned_directory_in
@@ -50,7 +50,7 @@ def load_data():
     return df
 
 
-# --- 3. MODEL FITTING FUNCTIONS ---
+# MODEL FITTING FUNCTIONS
 
 def fit_sarimax_grid(train, p_rng, d_rng, q_rng, seasonal_order_list):
     """Generic grid search for AR, MA, ARMA, ARIMA, SARIMA."""
@@ -117,7 +117,7 @@ def get_exponential_smoothing(train, period):
     return best_model, best_params
 
 
-# --- 4. MAIN ANALYSIS ROUTINE ---
+# MAIN ANALYSIS ROUTINE
 def run_analysis():
     df = load_data()
     if df is None: return
@@ -135,7 +135,7 @@ def run_analysis():
         for street in TARGET_STREETS:
             print(f"  Analyzing {street}...")
 
-            # --- PREPARE DATA ---
+            # PREPARE DATA
             street_data = df[df["CADDE"].str.strip().str.upper() == street]
             ts_resampled = street_data.set_index("TARIH").resample(freq_config['freq']).size()
 
@@ -155,7 +155,7 @@ def run_analysis():
             test = ts.iloc[-test_size:]
             period = freq_config['period']
 
-            # --- DEFINE MODEL SUITE ---
+            # DEFINE MODEL SUITE
             # Format: (Type_Name, Function, Args)
             models_to_run = []
 
@@ -183,7 +183,7 @@ def run_analysis():
             # 6. Exponential Smoothing
             models_to_run.append(("ExpSmoothing", get_exponential_smoothing, (train, period)))
 
-            # --- RUN MODELS ---
+            # RUN MODELS
             best_mae_for_street = float("inf")
             winner_model_name = "None"
             winner_preds = None
@@ -228,7 +228,7 @@ def run_analysis():
                     # print(f"  Error fitting {m_name}: {e}") # specific debug
                     continue
 
-            # --- PLOTTING (Winner vs Baseline) ---
+            # PLOTTING (Winner vs Baseline)
             if winner_preds is not None:
                 plt.figure(figsize=(12, 6))
                 plot_start = train.index[-max(test_size * 4, 20)]
@@ -255,7 +255,7 @@ def run_analysis():
                 plt.savefig(f"analysis_plots/{safe_name}_{freq_name}_BestFit.png")
                 plt.close()
 
-    # --- REPORTING ---
+    # REPORTING
     res_df = pd.DataFrame(results_summary)
     res_df.to_csv("street_analysis_detailed.csv", index=False)
 

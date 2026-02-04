@@ -8,7 +8,7 @@ import warnings
 import itertools
 import os
 
-# --- 1. CONFIGURATION & IMPORTS ---
+# CONFIGURATION & IMPORTS
 warnings.filterwarnings("ignore")
 
 # Target Districts for specific analysis
@@ -25,7 +25,7 @@ FREQUENCIES = {
 }
 
 
-# --- 2. DATA LOADING & PREPROCESSING ---
+# DATA LOADING & PREPROCESSING
 def normalize_turkish_chars(text):
     if not isinstance(text, str): return text
     replacements = {
@@ -62,7 +62,7 @@ def load_data():
     return df
 
 
-# --- 3. METRICS & MODEL FUNCTIONS ---
+# METRICS & MODEL FUNCTIONS
 
 def calculate_safe_mape(y_true, y_pred):
     y_true, y_pred = np.array(y_true), np.array(y_pred)
@@ -119,7 +119,7 @@ def get_exponential_smoothing(train, period):
     return best_model, best_params
 
 
-# --- 4. CORE ANALYSIS ENGINE ---
+# CORE ANALYSIS ENGINE
 
 def find_best_model_for_series(name, series, freq_name, freq_config):
     """
@@ -213,7 +213,7 @@ def plot_best_result(result, output_folder="analysis_plots"):
     plt.close()
 
 
-# --- 5. MAIN ROUTINE ---
+# MAIN ROUTINE
 def run_analysis():
     df = load_data()
     if df is None: return
@@ -243,7 +243,7 @@ def run_analysis():
             summary_rows.append(res)
             plot_best_result(res, "total_izmir_plots")
 
-    # --- PHASE 2: DISTRICT ANALYSIS ---
+    # PHASE 2: DISTRICT ANALYSIS
     print("\n" + "=" * 40)
     print("PHASE 2: TARGET DISTRICT ANALYSIS")
     print("=" * 40)
@@ -272,7 +272,7 @@ def run_analysis():
                 summary_rows.append(res)
                 plot_best_result(res, "district_analysis_plots")
 
-    # --- SAVE SUMMARY ---
+    # SAVE SUMMARY
     # Convert list of dicts to DF, drop the heavy series objects for CSV
     export_data = [{k: v for k, v in r.items() if k not in ['Preds', 'Test', 'Train']} for r in summary_rows]
     res_df = pd.DataFrame(export_data)

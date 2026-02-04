@@ -36,7 +36,7 @@ def fetch_day(dt: date):
     for o in obs:
         t_local = datetime.fromtimestamp(o["valid_time_gmt"], tz=timezone.utc).astimezone(TZ_LOCAL)
 
-        # ✅ Windows-safe 12-hour format:
+        # Windows-safe 12-hour format:
         time_12h = t_local.strftime("%I:%M %p").lstrip("0")
 
         rows.append({
@@ -57,7 +57,7 @@ def daterange(d0: date, d1: date):
 all_rows = []
 for d in daterange(START, END):
     all_rows.extend(fetch_day(d))
-    time.sleep(0.3)  # be nice to the API
+    time.sleep(0.3)
 
 
 if not all_rows:

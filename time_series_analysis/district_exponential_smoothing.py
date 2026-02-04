@@ -6,7 +6,7 @@ import numpy as np
 import warnings
 import os
 
-# --- 1. CONFIGURATION & IMPORTS ---
+# CONFIGURATION & IMPORTS
 warnings.filterwarnings("ignore")
 
 # Target Districts
@@ -31,7 +31,7 @@ FREQUENCIES = {
 }
 
 
-# --- 2. DATA LOADING & PREPROCESSING ---
+# DATA LOADING & PREPROCESSING
 def normalize_turkish_chars(text):
     if not isinstance(text, str): return text
     replacements = {
@@ -68,7 +68,7 @@ def load_data():
     return df
 
 
-# --- 3. METRIC FUNCTIONS ---
+# METRIC FUNCTIONS
 def calculate_mape(y_true, y_pred):
     """
     Calculates Mean Absolute Percentage Error (MAPE).
@@ -83,7 +83,7 @@ def calculate_mape(y_true, y_pred):
     return np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100
 
 
-# --- 4. EXPONENTIAL SMOOTHING AUTOMATION ---
+# EXPONENTIAL SMOOTHING AUTOMATION
 def find_best_es_model(train, period):
     """
     Grid searches for the best Exponential Smoothing configuration (Trend/Seasonal).
@@ -126,7 +126,7 @@ def find_best_es_model(train, period):
     return best_model, best_cfg_name
 
 
-# --- 5. MAIN ROUTINE ---
+# MAIN ROUTINE
 def run_es_analysis():
     df = load_data()
     if df is None: return

@@ -15,7 +15,7 @@ except:
 
 df.columns = df.columns.str.strip().str.upper()
 
-# --- Find date column ---
+# Find date column
 date_col = None
 for c in df.columns:
     if "TARIH" in c or "DATE" in c:
@@ -28,7 +28,7 @@ if date_col is None:
 df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
 df = df.dropna(subset=[date_col])
 
-# --- Normalize CADDE ---
+# Normalize CADDE
 if "CADDE" not in df.columns:
     raise ValueError("No 'CADDE' column found in the dataset!")
 
@@ -51,9 +51,9 @@ def analyze_cadde_time_series_weekly(
 
     print(f"\nAnalyzing CADDE (Weekly): {cadde_name} (records: {len(cadde_df)})")
 
-    # ==============================
+
     # Weekly time series
-    # ==============================
+
     cadde_df.set_index(date_col, inplace=True)
 
     # Resample to weekly frequency ('W')
@@ -69,9 +69,9 @@ def analyze_cadde_time_series_weekly(
     print("\nFull weekly time series (head):")
     print(weekly_ts.head())
 
-    # ==============================
+
     # Train / Test split
-    # ==============================
+
     train = weekly_ts.iloc[:-holdout_weeks]
     test = weekly_ts.iloc[-holdout_weeks:]
 
@@ -90,9 +90,9 @@ def analyze_cadde_time_series_weekly(
     plt.tight_layout()
     plt.show()
 
-    # ==============================
+
     # Fit ARIMA on TRAIN ONLY
-    # ==============================
+
     print(f"\nFitting ARIMA model with order={order} on TRAIN data only...")
     model = ARIMA(train, order=order)
     model_fit = model.fit()
@@ -100,9 +100,9 @@ def analyze_cadde_time_series_weekly(
     print("\nModel summary:")
     print(model_fit.summary())
 
-    # ==============================
+
     # Forecast next `forecast_steps` weeks
-    # ==============================
+
     forecast = model_fit.forecast(steps=forecast_steps)
 
     # Create future index (weekly)
@@ -118,9 +118,9 @@ def analyze_cadde_time_series_weekly(
     forecast_on_test = forecast_series.iloc[:overlap_steps]
     test_overlap = test.iloc[:overlap_steps]
 
-    # ==============================
+
     # Error metrics
-    # ==============================
+
     mae = np.mean(np.abs(test_overlap - forecast_on_test))
     rmse = np.sqrt(np.mean((test_overlap - forecast_on_test) ** 2))
 
@@ -132,9 +132,9 @@ def analyze_cadde_time_series_weekly(
     print(f"\nMAE  = {mae:.3f}")
     print(f"RMSE = {rmse:.3f}")
 
-    # ==============================
+
     # Plot: Train, Test, Forecast
-    # ==============================
+
     plt.figure(figsize=(12, 5))
     plt.plot(train, label="Train", marker="o", markersize=3, alpha=0.7)
     plt.plot(test, label="Test (actual)", marker="o", markersize=3, alpha=0.7)

@@ -279,11 +279,11 @@ from path_getter import get_path_for_binned_directory_in
 
 warnings.filterwarnings("ignore")
 
-# --- Load Data ---
+# Load Data
 file_path = get_path_for_binned_directory_in()[3:]
 df = pd.read_excel(file_path)
 
-# --- Preprocessing ---
+#  Preprocessing
 df.columns = df.columns.str.strip().str.upper()
 df["TARIH"] = pd.to_datetime(df["TARIH"], errors="coerce")
 districts = ["KONAK", "BAYRAKLI", "GAZIEMIR", "BORNOVA", "KARABAĞLAR",

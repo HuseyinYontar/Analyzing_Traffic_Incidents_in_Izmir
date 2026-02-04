@@ -8,7 +8,7 @@ import warnings
 import itertools
 import os
 
-# --- 1. CONFIGURATION & IMPORTS ---
+# CONFIGURATION & IMPORTS
 warnings.filterwarnings("ignore")
 
 # Target Districts
@@ -33,7 +33,7 @@ FREQUENCIES = {
 }
 
 
-# --- 2. DATA LOADING & PREPROCESSING ---
+# DATA LOADING & PREPROCESSING
 def normalize_turkish_chars(text):
     """
     Handles reliable uppercase conversion for Turkish characters.
@@ -74,7 +74,7 @@ def load_data():
     return df
 
 
-# --- 3. METRICS & MODEL FUNCTIONS ---
+# METRICS & MODEL FUNCTIONS
 
 def calculate_safe_mape(y_true, y_pred):
     """
@@ -154,7 +154,7 @@ def get_exponential_smoothing(train, period):
     return best_model, best_params
 
 
-# --- 4. MAIN ANALYSIS ROUTINE ---
+# MAIN ANALYSIS ROUTINE
 def run_analysis():
     df = load_data()
     if df is None: return
@@ -173,7 +173,7 @@ def run_analysis():
             dist_norm = normalize_turkish_chars(district)
             print(f"  Analyzing {district}...")
 
-            # --- PREPARE DATA ---
+            # PREPARE DATA
             dist_data = df[df["ILCE_NORM"] == dist_norm]
             ts_resampled = dist_data.set_index("TARIH").resample(freq_config['freq']).size()
 
@@ -209,7 +209,7 @@ def run_analysis():
 
             models_to_run.append(("ExpSmoothing", get_exponential_smoothing, (train, period)))
 
-            # --- RUN & COMPARE ---
+            # RUN & COMPARE
             best_mae = float("inf")
             winner_name = "None"
             winner_preds = None
@@ -255,7 +255,7 @@ def run_analysis():
                 except:
                     continue
 
-            # --- PLOT WINNER ---
+            # PLOT WINNER
             if winner_preds is not None:
                 plt.figure(figsize=(12, 6))
 
@@ -285,7 +285,7 @@ def run_analysis():
                 plt.savefig(f"district_analysis_plots/{safe_name}_{freq_name}_Best.png")
                 plt.close()
 
-    # --- SAVE RESULTS ---
+    # SAVE RESULTS
     res_df = pd.DataFrame(results_summary)
 
     # Reorder columns to put MAPE near MAE

@@ -10,7 +10,7 @@ df = pd.read_excel(file_path)
 
 df.columns = df.columns.str.strip().str.upper()
 
-# --- Find date column ---
+# Find date column
 date_col = None
 for c in df.columns:
     if "TARIH" in c or "DATE" in c:
@@ -23,7 +23,7 @@ if date_col is None:
 df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
 df = df.dropna(subset=[date_col])
 
-# --- Normalize CADDE for robust matching ---
+# Normalize CADDE for robust matching
 if "CADDE" not in df.columns:
     raise ValueError("No 'CADDE' column found in the dataset!")
 
@@ -46,9 +46,8 @@ def analyze_cadde_time_series(
 
     print(f"\nAnalyzing CADDE: {cadde_name} (records: {len(cadde_df)})")
 
-    # ==============================
+
     # Monthly time series
-    # ==============================
     cadde_df.set_index(date_col, inplace=True)
     monthly_ts = cadde_df.resample("MS").size().rename("TOTAL_INCIDENTS")
 
@@ -64,9 +63,9 @@ def analyze_cadde_time_series(
     print("\nFull monthly time series (head):")
     print(monthly_ts.head())
 
-    # ==============================
+
     # Train / Test split
-    # ==============================
+
     train = monthly_ts.iloc[:-holdout_months]
     test = monthly_ts.iloc[-holdout_months:]
 
@@ -85,9 +84,9 @@ def analyze_cadde_time_series(
     plt.tight_layout()
     plt.show()
 
-    # ==============================
+
     # Fit ARIMA on TRAIN ONLY
-    # ==============================
+
     print(f"\nFitting ARIMA model with order={order} on TRAIN data only...")
     model = ARIMA(train, order=order)
     model_fit = model.fit()
@@ -95,9 +94,9 @@ def analyze_cadde_time_series(
     print("\nModel summary:")
     print(model_fit.summary())
 
-    # ==============================
+
     # Forecast next `forecast_steps` months
-    # ==============================
+
     forecast = model_fit.forecast(steps=forecast_steps)
     future_index = pd.date_range(
         start=train.index[-1] + pd.offsets.MonthBegin(1),
@@ -111,9 +110,9 @@ def analyze_cadde_time_series(
     forecast_on_test = forecast_series.iloc[:overlap_steps]
     test_overlap = test.iloc[:overlap_steps]
 
-    # ==============================
+
     # Error metrics on held-out last 6 months
-    # ==============================
+
     mae = np.mean(np.abs(test_overlap - forecast_on_test))
     rmse = np.sqrt(np.mean((test_overlap - forecast_on_test) ** 2))
 
@@ -125,9 +124,9 @@ def analyze_cadde_time_series(
     print(f"\nMAE  = {mae:.3f}")
     print(f"RMSE = {rmse:.3f}")
 
-    # ==============================
+
     # Plot: Train, Test, Forecast (12 months)
-    # ==============================
+
     plt.figure(figsize=(12, 5))
     plt.plot(train, label="Train", marker="o")
     plt.plot(test, label="Test (actual)", marker="o")

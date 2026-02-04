@@ -2,9 +2,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pmdarima import auto_arima
 from path_getter import get_path_for_binned_directory_in
-# ====================================
-# 1. Load dataset
-# ====================================
+
+# Load dataset using path getter
+
 file_path = get_path_for_binned_directory_in()[3:]
 df = pd.read_excel(file_path)
 
@@ -24,9 +24,9 @@ if date_col is None:
 df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
 df = df.dropna(subset=[date_col])
 
-# ====================================
-# 2. Aggregate monthly incident counts
-# ====================================
+
+# Aggregate monthly incident counts
+
 df["YEAR_MONTH"] = df[date_col].dt.to_period("M").astype(str)
 
 monthly_counts = (
@@ -42,9 +42,9 @@ ts.index = pd.to_datetime(ts.index)
 print("\nMonthly time series head:")
 print(ts.head())
 
-# ====================================
-# 3. AUTO-ARIMA MODEL SELECTION
-# ====================================
+
+# AUTO-ARIMA MODEL SELECTION
+
 print("\nRunning Auto-ARIMA (this may take a few seconds)...")
 
 model = auto_arima(
@@ -59,9 +59,9 @@ model = auto_arima(
 print("\nBest Model Found:")
 print(model.summary())
 
-# ====================================
-# 4. Forecast next 12 months
-# ====================================
+
+# Forecast next 12 months
+
 future_steps = 12
 forecast = model.predict(n_periods=future_steps)
 
@@ -69,9 +69,9 @@ forecast = model.predict(n_periods=future_steps)
 future_dates = pd.date_range(start=ts.index[-1] + pd.offsets.MonthBegin(1), periods=future_steps, freq="MS")
 forecast_series = pd.Series(forecast, index=future_dates)
 
-# ====================================
-# 5. Plot actual vs forecast
-# ====================================
+
+# Plot actual vs forecast
+
 plt.figure(figsize=(12,6))
 plt.plot(ts, label="Actual", marker="o")
 plt.plot(forecast_series, label="Forecast", marker="x", linestyle="--")

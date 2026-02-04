@@ -14,7 +14,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 
-# --- 1. CONFIGURATION & IMPORTS ---
+# CONFIGURATION & IMPORTS
 warnings.filterwarnings("ignore")
 
 TARGET_STREETS = [
@@ -35,7 +35,7 @@ FREQUENCIES = {
 }
 
 
-# --- 2. DATA LOADING ---
+# DATA LOADING
 def load_data():
     try:
         from path_getter import get_path_for_binned_directory_in
@@ -56,7 +56,7 @@ def load_data():
     return df
 
 
-# --- 3. FEATURE ENGINEERING ---
+# FEATURE ENGINEERING
 def create_features(ts_data, freq_name):
     """
     Creates deterministic features (Calendar + Trend) from the index.
@@ -88,7 +88,7 @@ def create_features(ts_data, freq_name):
     return df_feat
 
 
-# --- 4. MODEL SUITE ---
+# MODEL SUITE
 def get_regressors():
     """Returns a dictionary of models to test."""
     return {
@@ -103,7 +103,7 @@ def get_regressors():
     }
 
 
-# --- 5. MAIN ANALYSIS ROUTINE ---
+# MAIN ANALYSIS ROUTINE
 def run_regression_analysis():
     df = load_data()
     if df is None: return
@@ -121,7 +121,7 @@ def run_regression_analysis():
         for street in TARGET_STREETS:
             print(f"  Analyzing {street}...")
 
-            # --- DATA PREP (Same logic as before) ---
+            #  DATA PREP
             street_data = df[df["CADDE"].str.strip().str.upper() == street]
             ts_resampled = street_data.set_index("TARIH").resample(freq_config['freq']).size()
 
@@ -137,7 +137,7 @@ def run_regression_analysis():
                 print(f"    Skipping: Not enough data.")
                 continue
 
-            # --- CREATE FEATURES ---
+            # CREATE FEATURES
             df_features = create_features(ts, freq_name)
 
             # Split X (Features) and y (Target)
@@ -150,7 +150,7 @@ def run_regression_analysis():
             y_train = y.iloc[:-test_size]
             y_test = y.iloc[-test_size:]
 
-            # --- RUN MODELS ---
+            # RUN MODELS
             models = get_regressors()
 
             best_mae = float("inf")
@@ -194,7 +194,7 @@ def run_regression_analysis():
                 except Exception as e:
                     continue
 
-            # --- PLOTTING ---
+            # PLOTTING
             if winner_preds is not None:
                 plt.figure(figsize=(12, 6))
                 plot_start = y_train.index[-max(test_size * 4, 20)]
@@ -221,7 +221,7 @@ def run_regression_analysis():
                 plt.savefig(f"regression_plots/{safe_name}_{freq_name}_Reg.png")
                 plt.close()
 
-    # --- REPORTING ---
+    # REPORTING
     res_df = pd.DataFrame(results_summary)
     res_df.to_csv("street_regression_detailed.csv", index=False)
 

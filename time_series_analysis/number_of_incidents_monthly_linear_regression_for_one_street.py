@@ -25,9 +25,9 @@ df = df.dropna(subset=[date_col])
 df["CADDE_NORM"] = df["CADDE"].str.strip().str.upper()
 
 
-# ====================================================
+
 # FUNCTION: Linear Trend for a given CADDE
-# ====================================================
+
 def linear_trend_for_cadde(cadde_name, min_points=6):
     cadde_norm = cadde_name.strip().upper()
 
@@ -40,9 +40,9 @@ def linear_trend_for_cadde(cadde_name, min_points=6):
 
     print(f"\nAnalyzing linear trend for CADDE: {cadde_name}  (records: {len(cadde_df)})")
 
-    # ============================
+
     # Monthly grouping
-    # ============================
+
     cadde_df.set_index(date_col, inplace=True)
 
     monthly_ts = cadde_df.resample("MS").size().rename("TOTAL_INCIDENTS")
@@ -52,9 +52,9 @@ def linear_trend_for_cadde(cadde_name, min_points=6):
         print(monthly_ts)
         return
 
-    # ============================
+
     # Fit linear regression
-    # ============================
+
 
     # Convert months to numeric indices 0,1,2,...
     X = np.arange(len(monthly_ts)).reshape(-1, 1)
@@ -69,9 +69,9 @@ def linear_trend_for_cadde(cadde_name, min_points=6):
     print(f"Slope     : {model.coef_[0]:.4f} incidents / month")
     print(f"Intercept : {model.intercept_:.4f}")
 
-    # ============================
+
     # Plot actual + trend line
-    # ============================
+
     plt.figure(figsize=(12, 6))
     plt.plot(monthly_ts.index, monthly_ts.values, marker="o", label="Actual Monthly Incidents")
     plt.plot(monthly_ts.index, trend, linestyle="--", label="Linear Trend")
@@ -86,8 +86,8 @@ def linear_trend_for_cadde(cadde_name, min_points=6):
     return monthly_ts, trend, model
 
 
-# ====================================================
+
 # Example usage
-# ====================================================
+
 if __name__ == "__main__":
     linear_trend_for_cadde("Yeşildere Caddesi")
