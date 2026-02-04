@@ -22,10 +22,10 @@ test_df  = pd.read_excel(test_path)
 
 TARGET = "KAZA_TIPI_Yaralanmalı/Ölümlü"
 
-X_train = train_df.drop(columns=[TARGET,"KAZA_TIPI"])
+X_train = train_df.drop(columns=[TARGET])
 y_train = train_df[TARGET].astype(int)
 
-X_test  = test_df.drop(columns=[TARGET,"KAZA_TIPI"])
+X_test  = test_df.drop(columns=[TARGET])
 y_test  = test_df[TARGET].astype(int)
 
 
@@ -51,9 +51,9 @@ preprocess = ColumnTransformer(
     verbose_feature_names_out=False
 )
 
-# -------------------------
-# 3) Base Random Forest model
-# -------------------------
+
+# Base Random Forest model
+
 rf = RandomForestClassifier(
     random_state=42,
     n_jobs=-1,

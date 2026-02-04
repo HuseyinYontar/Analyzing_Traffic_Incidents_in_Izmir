@@ -30,7 +30,7 @@ test_df  = pd.read_excel(test_path)
 
 TARGET = "KAZA_TIPI_Yaralanmalı/Ölümlü"
 
-X_train = train_df.drop(columns=[TARGET, "KAZA_TIPI"])
+X_train = train_df.drop(columns=[TARGET])
 y_train = train_df[TARGET].astype(int)
 
 X_test  = test_df.drop(columns=[TARGET])
