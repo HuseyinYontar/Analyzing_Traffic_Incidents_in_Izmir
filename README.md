@@ -1,6 +1,7 @@
 # Analyzing Traffic Incidents in Izmir
 
 A comprehensive data-driven analysis of traffic incident patterns in Izmir's metropolitan area, examining **21,161 incident records** spanning December 2021 to September 2025.
+
 [![Paper](https://img.shields.io/badge/Read_the_Paper-PDF-red?style=for-the-badge&logo=adobeacrobatreader)](https://ieeexplore.ieee.org/document/11537079)
 
 ## Abstract
